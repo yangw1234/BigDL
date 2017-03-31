@@ -23,7 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
 /**
- * a weighted sum of other criterions each applied to the same input and target;
+ * a weighted sum of other criteria each applied to the same input and target;
  */
 
 @SerialVersionUID(- 8679064077837483164L)
@@ -31,17 +31,17 @@ class MultiCriterion[@specialized(Float, Double) T: ClassTag]
 (implicit ev: TensorNumeric[T]) extends AbstractCriterion[Activity, Activity, T] {
 
   private val weights = new ArrayBuffer[Double]
-  private val criterions = T()
+  private val criteria = T()
 
   def add(criterion: AbstractCriterion[Activity, Activity, T], weight: Double = 1): Unit = {
-    criterions.insert(criterions.length() + 1, criterion)
+    criteria.insert(criteria.length() + 1, criterion)
     weights.append(weight)
   }
   override def updateOutput(input: Activity, target: Activity): T = {
     var i = 1
-    while (i <= criterions.length) {
+    while (i <= criteria.length) {
       output = ev.plus(output, ev.times(ev.fromType(weights(i-1)),
-        criterions[AbstractCriterion[Activity, Activity, T]](i).updateOutput(input, target)))
+        criteria[AbstractCriterion[Activity, Activity, T]](i).updateOutput(input, target)))
       i +=1
     }
     output
@@ -52,9 +52,9 @@ class MultiCriterion[@specialized(Float, Double) T: ClassTag]
       input)
     Utils.recursiveFill[T](gradInput, 0)
     var i = 1
-    while (i <= criterions.length) {
+    while (i <= criteria.length) {
       Utils.recursiveAdd(gradInput, weights(i - 1),
-        criterions[AbstractCriterion[Activity, Activity, T]](i).updateGradInput(input, target))
+        criteria[AbstractCriterion[Activity, Activity, T]](i).updateGradInput(input, target))
       i += 1
     }
     gradInput

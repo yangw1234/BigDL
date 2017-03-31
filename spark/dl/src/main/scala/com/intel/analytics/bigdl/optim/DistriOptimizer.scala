@@ -49,7 +49,7 @@ object DistriOptimizer {
    * @param localModels cached models
    * @param modelWeights weights of the cached models
    * @param modelGradients gradients of the cached models
-   * @param localCriterions cached criterion
+   * @param localCriteria cached criterion
    * @param localStates cached state
    * @param gradient tensor buffer
    * @tparam T
@@ -58,7 +58,7 @@ object DistriOptimizer {
     localModels: Array[Module[T]],
     modelWeights: Array[Tensor[T]],
     modelGradients: Array[Tensor[T]],
-    localCriterions: Array[Criterion[T]],
+    localCriteria: Array[Criterion[T]],
     localStates: Array[Table],
     gradient: Tensor[T],
     var moduleTimeList: Array[Long] = null,
@@ -194,7 +194,7 @@ object DistriOptimizer {
               val trainStart = System.nanoTime()
               val localModel = cached.localModels(i)
               localModel.training()
-              val localCriterion = cached.localCriterions(i)
+              val localCriterion = cached.localCriteria(i)
               val (input, target) = tensorBuffer(i)
               val output = localModel.forward(input)
               lossArray(i) = ev.toType[Double](localCriterion.forward(output, target))
@@ -259,7 +259,7 @@ object DistriOptimizer {
         val value = lossSum.value / finishedModelNum
         models.mapPartitions(modelIter => {
           val modelCache = modelIter.next()
-          parameters.aggregrateGradientPartition()
+          parameters.aggregateGradientPartition()
           parameters.gradientPartition.div(ev.fromType(finishedModelNum))
           modelCache.localStates.head("neval") = driverState[Int]("neval")
           modelCache.localStates.head("epoch") = driverState[Int]("epoch")
@@ -440,7 +440,7 @@ object DistriOptimizer {
   }
 
   /**
-   * Init engine and cache models, weights, gradients, criterions, state tables
+   * Init engine and cache models, weights, gradients, criteria, state tables
    * and validation methods on worker nodes.
    *
    * @param model train model
@@ -515,7 +515,7 @@ object DistriOptimizer {
         cached.map(_._1), // models
         cached.map(_._2), // weights
         cached.map(_._3), // gradients
-        cached.map(_._4), // criterions
+        cached.map(_._4), // criteria
         cached.map(_._5), // states
         cached.head._2.clone(), // a tensor buffer
         new Array[Long](_subModelNumber * computeThresholdbatchSize),
@@ -585,8 +585,8 @@ object DistriOptimizer {
               val input = batch.data.narrow(1, offset + 1, length)
               val target = batch.labels.narrow(1, offset + 1, length)
               val output = workingModels(b).forward(input)
-              val validatMethods = vMethodsArr(b).get
-              validatMethods.map(validation => {
+              val validateMethods = vMethodsArr(b).get
+              validateMethods.map(validation => {
                 validation(output, target)
               })
             }

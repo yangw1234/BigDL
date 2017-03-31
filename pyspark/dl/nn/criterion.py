@@ -251,7 +251,7 @@ class MarginRankingCriterion(Criterion):
 class MultiCriterion(Criterion):
 
     '''
-    a weighted sum of other criterions each applied to the same input and target
+    a weighted sum of other criteria each applied to the same input and target
 
     >>> multiCriterion = MultiCriterion()
     creating: createMultiCriterion
@@ -284,12 +284,12 @@ class MultiLabelMarginCriterion(Criterion):
 class ParallelCriterion(Criterion):
 
     '''
-    ParallelCriterion is a weighted sum of other criterions each applied to a different input
-    and target. Set repeatTarget = true to share the target for criterions.
+    ParallelCriterion is a weighted sum of other criteria each applied to a different input
+    and target. Set repeatTarget = true to share the target for criteria.
 
     Use add(criterion[, weight]) method to add criterion. Where weight is a scalar(default 1).
 
-    :param repeat_target Whether to share the target for all criterions.
+    :param repeat_target Whether to share the target for all criteria.
 
     >>> parallelCriterion = ParallelCriterion(True)
     creating: createParallelCriterion

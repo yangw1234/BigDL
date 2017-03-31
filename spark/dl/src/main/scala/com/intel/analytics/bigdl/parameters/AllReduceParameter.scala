@@ -68,7 +68,7 @@ class AllReduceParameter[T: ClassTag](id: Long, partitionNum: Int,
   @transient private var partitionId: Int = 0
 
   @transient lazy val parameterBuffer: CompressedTensor[T] = readParameterBuffer()
-  @transient lazy val weightPartition: Tensor[T] = readWeightParititon()
+  @transient lazy val weightPartition: Tensor[T] = readWeightPartition()
   @transient lazy val gradientPartition: Tensor[T] = readGradientPartition()
 
   private def readObject(in: java.io.ObjectInputStream) = {
@@ -83,7 +83,7 @@ class AllReduceParameter[T: ClassTag](id: Long, partitionNum: Int,
       partitionNum).asInstanceOf[CompressedTensor[T]]
   }
 
-  def readWeightParititon(): Tensor[T] = {
+  def readWeightPartition(): Tensor[T] = {
     val blockId = getWeightPartitionId()
     BlockManagerWrapper.getLocal(blockId).map(_.data.next()) match {
       case Some(x) =>
@@ -169,7 +169,7 @@ class AllReduceParameter[T: ClassTag](id: Long, partitionNum: Int,
     new FutureResult(tasks)
   }
 
-  def aggregrateGradientPartition(): Unit = {
+  def aggregateGradientPartition(): Unit = {
     val bm = SparkEnv.get.blockManager
     require(partitionId < partitionNum)
     val params = new Array[CompressedTensor[T]](partitionNum)

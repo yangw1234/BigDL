@@ -23,27 +23,27 @@ import com.intel.analytics.bigdl.utils.{T, Table}
 import scala.reflect.ClassTag
 
 /**
- * ParallelCriterion is a weighted sum of other criterions each applied to a different input
- * and target. Set repeatTarget = true to share the target for criterions.
+ * ParallelCriterion is a weighted sum of other criteria each applied to a different input
+ * and target. Set repeatTarget = true to share the target for criteria.
  *
  * Use add(criterion[, weight]) method to add criterion. Where weight is a scalar(default 1).
  *
- * @param repeatTarget Whether to share the target for all criterions.
+ * @param repeatTarget Whether to share the target for all criteria.
  */
 
 @SerialVersionUID(- 556839979002442525L)
 class ParallelCriterion[@specialized(Float, Double) T: ClassTag](val repeatTarget: Boolean = false)
   (implicit ev: TensorNumeric[T]) extends AbstractCriterion[Table, Table, T] {
 
-  // list of sub criterions
-  val criterions = T()
+  // list of sub criteria
+  val criteria = T()
   val weights = T()
   val outputs = T()
 
   def add(
     criterion: AbstractCriterion[_ <: Activity, _ <: Activity, T],
     weight : Double = 1.0): this.type = {
-    criterions.insert(criterion)
+    criteria.insert(criterion)
     weights.insert(ev.fromType(weight))
     outputs.insert(ev.fromType(0))
     this
@@ -52,8 +52,8 @@ class ParallelCriterion[@specialized(Float, Double) T: ClassTag](val repeatTarge
   override def updateOutput(input: Table, target: Table): T = {
     var output = ev.fromType[Int](0)
     var i = 1
-    while(i <= criterions.length()) {
-      val currentCriterion = criterions[AbstractCriterion[Activity, Activity, T]](i)
+    while(i <= criteria.length()) {
+      val currentCriterion = criteria[AbstractCriterion[Activity, Activity, T]](i)
       val currentTarget: Activity = if (repeatTarget) target else target(i)
       outputs(i) = currentCriterion.forward(input(i), currentTarget)
       output = ev.plus(output, ev.times(weights[T](i), outputs(i)))
@@ -67,8 +67,8 @@ class ParallelCriterion[@specialized(Float, Double) T: ClassTag](val repeatTarge
     gradInput = Utils.recursiveResizeAs[T](gradInput, input).toTable
     Utils.recursiveFill[T](gradInput, 0)
     var i = 1
-    while (i <= criterions.length()) {
-      val currentCriterion = criterions[AbstractCriterion[Activity, Activity, T]](i)
+    while (i <= criteria.length()) {
+      val currentCriterion = criteria[AbstractCriterion[Activity, Activity, T]](i)
       val currentTarget: Activity = if (repeatTarget) target else target(i)
       Utils.recursiveAdd[T](gradInput(i), ev.toType[Double](weights(i)),
         currentCriterion.updateGradInput(input(i), currentTarget))

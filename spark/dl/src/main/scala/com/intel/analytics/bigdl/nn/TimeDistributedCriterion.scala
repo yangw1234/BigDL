@@ -39,7 +39,7 @@ class TimeDistributedCriterion[T : ClassTag](
 
   private var fInput: Tensor[T] = Tensor[T]()
   private var fTarget: Tensor[T] = Tensor[T]()
-  private var _gradInput = Tensor[T]()  // list of cell criterions cloned from added criterion
+  private var _gradInput = Tensor[T]()  // list of cell criteria cloned from added criterion
   private val cells: ArrayBuffer[TensorCriterion[T]]
   = ArrayBuffer[TensorCriterion[T]]()
 
@@ -48,7 +48,7 @@ class TimeDistributedCriterion[T : ClassTag](
 
 
   /**
-   * Clone N criterions; N depends on the time dimension of the input
+   * Clone N criteria; N depends on the time dimension of the input
    * @param times
    */
   private def extend(times: Int): Unit = {
