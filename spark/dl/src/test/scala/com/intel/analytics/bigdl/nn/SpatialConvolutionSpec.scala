@@ -198,6 +198,7 @@ class SpatialConvolutionSpec extends FlatSpec with Matchers {
   }
 
   "A SpatialConvolutionNHWC layer" should "generate correct output" in {
+    import tensor.TensorNumericMath.TensorNumeric.NumericDouble
     case class conv(nIn: Int, nOut: Int, kW: Int, kH: Int, dW: Int, dH: Int, pW: Int, pH: Int)
     val params = List(
       conv(1, 1, 3, 3, 1, 1, 0, 0),
@@ -215,22 +216,23 @@ class SpatialConvolutionSpec extends FlatSpec with Matchers {
     )
 
     for (param <- params) {
-      val layer = new SpatialConvolution[Double](param.nIn, param.nOut,
+      println(param)
+      val layer = new SpatialConvolution(param.nIn, param.nOut,
         param.kW, param.kH, param.dW, param.dH, param.pW, param.pH)
-      val layerNHWC = new SpatialConvolutionNHWC[Double](param.nIn, param.nOut,
+      val layerNHWC = new SpatialConvolutionNHWC(param.nIn, param.nOut,
         param.kW, param.kH, param.dW, param.dH, param.pW, param.pH)
 
-      val input = Tensor[Double](Array(4, param.nIn, 7, 7)).randn()
+      val input = Tensor(Array(4, param.nIn, 7, 7)).randn()
 
-      val inputNHWC = Tensor[Double](Array(4, param.nIn, 7, 7))
+      val inputNHWC = Tensor(input.size())
         .copy(input).transpose(2, 4).transpose(2, 3).contiguous()
 
-      val kernel = Tensor[Double](Array(param.nOut, param.nIn, param.kH, param.kW)).randn()
-      val bias = Tensor[Double](Array(param.nOut)).randn()
+      val kernel = Tensor(Array(param.nOut, param.nIn, param.kH, param.kW)).randn()
+      val bias = Tensor(Array(param.nOut)).randn()
 
-      val kernelNHWC = Tensor[Double](Array(param.nOut, param.nIn, param.kH, param.kW))
+      val kernelNHWC = Tensor(Array(param.nOut, param.nIn, param.kH, param.kW))
         .copy(kernel).transpose(1, 4).transpose(2, 3).transpose(1, 2).contiguous()
-      val biasNHWC = Tensor[Double](Array(param.nOut)).copy(bias)
+      val biasNHWC = Tensor(Array(param.nOut)).copy(bias)
 
       layer.weight.copy(kernel)
       layerNHWC.weight.copy(kernelNHWC)
@@ -238,9 +240,22 @@ class SpatialConvolutionSpec extends FlatSpec with Matchers {
       layerNHWC.bias.copy(biasNHWC)
 
       val output = layer.forward(input)
-      val outputNHWC = layerNHWC.forward(inputNHWC).transpose(2, 4).transpose(3, 4)
+      val outputNHWC = layerNHWC.forward(inputNHWC)
+      val gradOutput = Tensor(output.size()).fill(1.0)
+      val gradOutputNHWC = Tensor(outputNHWC.size()).fill(1.0)
 
-      outputNHWC should be (output)
+      val gradInput = layer.backward(input, gradOutput)
+      val gradInputNHWC = layerNHWC.backward(inputNHWC, gradOutputNHWC)
+
+
+      outputNHWC.transpose(2, 4).transpose(3, 4)
+        .sub(output).pow(2).sum() should be < 1e-7
+      gradInputNHWC.transpose(2, 4).transpose(3, 4)
+        .sub(gradInput).pow(2).sum() should be < 1e-7
+
+      val transWeight = layerNHWC.weight.transpose(1, 4).transpose(2, 3).transpose(3, 4)
+      transWeight.sub(layer.weight).pow(2).sum() should be < 1e-7
+
     }
   }
 
