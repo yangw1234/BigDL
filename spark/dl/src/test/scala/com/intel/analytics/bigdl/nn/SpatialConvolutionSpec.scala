@@ -22,10 +22,9 @@ import org.scalatest.{FlatSpec, Matchers}
 import scala.math._
 import com.intel.analytics.bigdl._
 import com.intel.analytics.bigdl.optim.{L2Regularizer, SGD}
-import com.intel.analytics.bigdl.utils.T
 import com.intel.analytics.bigdl.utils.RandomGenerator._
-
 import scala.util.Random
+import com.intel.analytics.bigdl.utils.{ConvPerf, T}
 
 @com.intel.analytics.bigdl.tags.Parallel
 class SpatialConvolutionSpec extends FlatSpec with Matchers {
@@ -198,40 +197,58 @@ class SpatialConvolutionSpec extends FlatSpec with Matchers {
     loss1 should be(loss2)
   }
 
-  "A SpatialConvolution layer" should "generate correct output" in {
-    val nInputPlane = 1
-    val nOutputPlane = 1
-    val kW = 2
-    val kH = 2
-    val dW = 1
-    val dH = 1
-    val padW = 0
-    val padH = 0
-    val layer = new SpatialConvolution[Double](nInputPlane, nOutputPlane,
-      kW, kH, dW, dH, padW, padH)
-
-    val inputData = Array(
-      1.0, 2, 3,
-      4, 5, 6,
-      7, 8, 9
+  "A SpatialConvolutionNHWC layer" should "generate correct output" in {
+    case class conv(nIn: Int, nOut: Int, kW: Int, kH: Int, dW: Int, dH: Int, pW: Int, pH: Int)
+    val params = List(
+      conv(1, 1, 3, 3, 1, 1, 0, 0),
+      conv(1, 1, 1, 1, 1, 1, 0, 0),
+      conv(1, 1, 5, 5, 1, 1, 0, 0),
+      conv(4, 4, 3, 3, 1, 1, 0, 0),
+      conv(4, 4, 1, 1, 1, 1, 0, 0),
+      conv(4, 4, 5, 5, 1, 1, 0, 0),
+      conv(4, 4, 3, 3, 2, 2, 0, 0),
+      conv(4, 4, 1, 1, 2, 2, 0, 0),
+      conv(4, 4, 5, 5, 2, 2, 0, 0),
+      conv(4, 4, 3, 3, 2, 2, 1, 1),
+      conv(4, 4, 1, 1, 2, 2, 1, 1),
+      conv(4, 4, 5, 5, 2, 2, 1, 1)
     )
 
-    val kernelData = Array(
-      2.0, 3,
-      4, 5
-    )
+    for (param <- params) {
+      val layer = new SpatialConvolution[Double](param.nIn, param.nOut,
+        param.kW, param.kH, param.dW, param.dH, param.pW, param.pH)
+      val layerNHWC = new SpatialConvolutionNHWC[Double](param.nIn, param.nOut,
+        param.kW, param.kH, param.dW, param.dH, param.pW, param.pH)
 
-    val biasData = Array(0.0)
+      val input = Tensor[Double](Array(4, param.nIn, 7, 7)).randn()
 
-    layer.weight.copy(Tensor[Double](Storage(kernelData), 1, Array(nOutputPlane,
-      nInputPlane, kH, kW)))
-    layer.bias.copy(Tensor[Double](Storage(biasData), 1, Array(nOutputPlane)))
-    val input = Tensor[Double](Storage(inputData), 1, Array(1, 3, 3))
-    val output = layer.updateOutput(input)
-    output(Array(1, 1, 1)) should be(49)
-    output(Array(1, 1, 2)) should be(63)
-    output(Array(1, 2, 1)) should be(91)
-    output(Array(1, 2, 2)) should be(105)
+      val inputNHWC = Tensor[Double](Array(4, param.nIn, 7, 7))
+        .copy(input).transpose(2, 4).transpose(2, 3).contiguous()
+
+      val kernel = Tensor[Double](Array(param.nOut, param.nIn, param.kH, param.kW)).randn()
+      val bias = Tensor[Double](Array(param.nOut)).randn()
+
+      val kernelNHWC = Tensor[Double](Array(param.nOut, param.nIn, param.kH, param.kW))
+        .copy(kernel).transpose(1, 4).transpose(2, 3).transpose(1, 2).contiguous()
+      val biasNHWC = Tensor[Double](Array(param.nOut)).copy(bias)
+
+      layer.weight.copy(kernel)
+      layerNHWC.weight.copy(kernelNHWC)
+      layer.bias.copy(bias)
+      layerNHWC.bias.copy(biasNHWC)
+
+      val output = layer.forward(input)
+      val outputNHWC = layerNHWC.forward(inputNHWC).transpose(2, 4).transpose(3, 4)
+
+      outputNHWC should be (output)
+    }
+  }
+
+  "A spatialConvolution layer" should "perform well" in {
+
+    println("nchw")
+    ConvPerf.test1(0, 11)
+
   }
 
   "A SpatialConvolution layer" should "generate correct output with given weight" in {
