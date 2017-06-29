@@ -641,6 +641,178 @@ object NNPrimitive {
     }
   }
 
+  def maxPoolingForwardDoubleNHWC(
+      inputTensor: Tensor[Double], outputTensor: Tensor[Double], indicesTensor: Tensor[Double],
+      nSlices: Int, iWidth: Int, iHeight: Int, oWidth: Int, oHeight: Int,
+      kW: Int, kH: Int, dW: Int, dH: Int, padW: Int, padH: Int) {
+
+    val input = inputTensor.storage().array()
+    val inputOffset = inputTensor.storageOffset() - 1
+    val output = outputTensor.storage().array()
+    val outputOffset = outputTensor.storageOffset() - 1
+    val indices = indicesTensor.storage().array()
+    val indicesOffset = indicesTensor.storageOffset() - 1
+
+    var i = 0
+    while (i < oHeight) {
+      var j = 0
+      var hstart = i * dH - padH
+      val hend = math.min(hstart + kH, iHeight)
+      hstart = math.max(hstart, 0)
+      while (j < oWidth) {
+        var wstart = j * dW - padW
+        val wend = math.min(wstart + kW, iWidth)
+        wstart = math.max(wstart, 0)
+
+        val currOutLocStart = outputOffset + (i * oWidth + j) * nSlices
+        val currOutLocEnd = currOutLocStart + nSlices
+        val currIndicesLocStart = indicesOffset + (i * oWidth + j) * nSlices
+        val currIndicesLocEnd = currIndicesLocStart + nSlices
+        util.Arrays.fill(output, currOutLocStart, currOutLocEnd, Double.MinValue)
+        util.Arrays.fill(indices, currIndicesLocStart, currIndicesLocEnd, 0)
+        var y = hstart
+        while (y < hend) {
+          var x = wstart
+          while (x < wend) {
+            // k, y, x input indexers
+            val tcntr = y *iWidth + x
+            val currInLocStart = inputOffset + tcntr * nSlices
+            var n = 0
+            while (n < nSlices) {
+              val value = input(currInLocStart + n)
+              if (value > output(currOutLocStart + n)) {
+                output(currOutLocStart + n) = value
+                indices(currOutLocStart + n) = tcntr + 1
+              }
+              n = n + 1
+            }
+            x += 1
+          }
+          y += 1
+        }
+        j += 1
+      }
+      i += 1
+    }
+  }
+
+  def maxPoolingForwardFloatNHWC(
+       inputTensor: Tensor[Float], outputTensor: Tensor[Float], indicesTensor: Tensor[Float],
+       nSlices: Int, iWidth: Int, iHeight: Int, oWidth: Int, oHeight: Int,
+       kW: Int, kH: Int, dW: Int, dH: Int, padW: Int, padH: Int) {
+
+    val input = inputTensor.storage().array()
+    val inputOffset = inputTensor.storageOffset() - 1
+    val output = outputTensor.storage().array()
+    val outputOffset = outputTensor.storageOffset() - 1
+    val indices = indicesTensor.storage().array()
+    val indicesOffset = indicesTensor.storageOffset() - 1
+
+    var i = 0
+    while (i < oHeight) {
+      var j = 0
+      var hstart = i * dH - padH
+      val hend = math.min(hstart + kH, iHeight)
+      hstart = math.max(hstart, 0)
+      while (j < oWidth) {
+        var wstart = j * dW - padW
+        val wend = math.min(wstart + kW, iWidth)
+        wstart = math.max(wstart, 0)
+
+        val currOutLocStart = outputOffset + (i * oWidth + j) * nSlices
+        val currOutLocEnd = currOutLocStart + nSlices
+        val currIndicesLocStart = indicesOffset + (i * oWidth + j) * nSlices
+        val currIndicesLocEnd = currIndicesLocStart + nSlices
+        util.Arrays.fill(output, currOutLocStart, currOutLocEnd, Float.MinValue)
+        util.Arrays.fill(indices, currIndicesLocStart, currIndicesLocEnd, 0)
+        var y = hstart
+        while (y < hend) {
+          var x = wstart
+          while (x < wend) {
+            // k, y, x input indexers
+            val tcntr = y *iWidth + x
+            val currInLocStart = inputOffset + tcntr * nSlices
+            var n = 0
+            while (n < nSlices) {
+              val value = input(currInLocStart + n)
+              if (value > output(currOutLocStart + n)) {
+                output(currOutLocStart + n) = value
+                indices(currOutLocStart + n) = tcntr + 1
+              }
+              n = n + 1
+            }
+            x += 1
+          }
+          y += 1
+        }
+        j += 1
+      }
+      i += 1
+    }
+  }
+
+  def maxPoolingBackwardDoubleNHWC(
+     gradInputTensor: Tensor[Double],
+     gradOutputTensor: Tensor[Double],
+     indicesTensor: Tensor[Double],
+     nSlices: Int, iWidth: Int, iHeight: Int, oWidth: Int, oHeight: Int): Unit = {
+    val gradInput = gradInputTensor.storage().array()
+    val gradInputOffset = gradInputTensor.storageOffset() - 1
+    val gradOutput = gradOutputTensor.storage()
+    val gradOutputOffset = gradOutputTensor.storageOffset() - 1
+    val indices = indicesTensor.storage()
+    val indicesOffset = indicesTensor.storageOffset() - 1
+
+    var i = 0
+    while (i < oHeight) {
+      var j = 0
+      while (j < oWidth) {
+        val currOutLocStart = gradOutputOffset + (i * oWidth + j) * nSlices
+        val currIndicesLocStart = indicesOffset + (i * oWidth + j) * nSlices
+        var n = 0
+        while (n < nSlices) {
+          val maxIndex = indices(currIndicesLocStart + n).toInt - 1
+          val grad = gradOutput(currOutLocStart + n)
+          gradInput(gradInputOffset + maxIndex * nSlices + n) += grad
+          n = n + 1
+        }
+        j += 1
+      }
+      i += 1
+    }
+  }
+
+  def maxPoolingBackwardFloatNHWC(
+     gradInputTensor: Tensor[Float],
+     gradOutputTensor: Tensor[Float],
+     indicesTensor: Tensor[Float],
+     nSlices: Int, iWidth: Int, iHeight: Int, oWidth: Int, oHeight: Int): Unit = {
+    val gradInput = gradInputTensor.storage().array()
+    val gradInputOffset = gradInputTensor.storageOffset() - 1
+    val gradOutput = gradOutputTensor.storage()
+    val gradOutputOffset = gradOutputTensor.storageOffset() - 1
+    val indices = indicesTensor.storage()
+    val indicesOffset = indicesTensor.storageOffset() - 1
+
+    var i = 0
+    while (i < oHeight) {
+      var j = 0
+      while (j < oWidth) {
+        val currOutLocStart = gradOutputOffset + (i * oWidth + j) * nSlices
+        val currIndicesLocStart = indicesOffset + (i * oWidth + j) * nSlices
+        var n = 0
+        while (n < nSlices) {
+          val maxIndex = indices(currIndicesLocStart + n).toInt - 1
+          val grad = gradOutput(currOutLocStart + n)
+          gradInput(gradInputOffset + maxIndex * nSlices + n) += grad
+          n = n + 1
+        }
+        j += 1
+      }
+      i += 1
+    }
+  }
+
   def maxPoolingBackwardFloat(
     gradInput: Array[Float], gradInputOffset: Int,
     gradOutput: Array[Float], gradOutputOffset: Int,
