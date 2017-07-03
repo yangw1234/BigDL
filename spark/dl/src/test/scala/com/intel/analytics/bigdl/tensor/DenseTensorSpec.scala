@@ -767,4 +767,14 @@ class DenseTensorSpec extends FlatSpec with Matchers {
     b.valueAt(3) should be (0.01f)
     a.valueAt(2, 3) should be (0.01f)
   }
+
+  "tensor sub" should "work" in {
+    val a = Tensor[Double](1, 2).fill(1.0)
+    val b = Tensor[Double](1, 2).fill(2.0)
+    val c = Tensor[Double](1, 2).fill(5.0)
+    c.sub(a, b)
+    println(a)
+    println(b)
+    println(c)
+  }
 }

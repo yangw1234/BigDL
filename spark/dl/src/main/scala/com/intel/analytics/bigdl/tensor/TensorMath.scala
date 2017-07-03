@@ -138,6 +138,15 @@ trait TensorMath[T] {
   def mean(dim: Int): Tensor[T]
 
   /**
+   * performs the mean operation over the dimension dim.
+   *
+   * @param result the result buffer
+   * @param dim
+   * @return
+   */
+  def mean(result: Tensor[T], dim: Int): Unit
+
+  /**
    * returns the single biggest element of x
    * @return
    */

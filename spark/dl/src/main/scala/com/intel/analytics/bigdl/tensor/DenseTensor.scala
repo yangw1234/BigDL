@@ -720,6 +720,8 @@ private[tensor] class DenseTensor[@specialized(Float, Double) T: ClassTag](
 
   override def mean(dim: Int): Tensor[T] = DenseTensorMath.mean(this, dim - 1)
 
+  override def mean(x: Tensor[T], dim: Int): Unit = DenseTensorMath.mean(this, x, dim - 1)
+
   override def max(): T = DenseTensorMath.maxAll(this)
 
   override def max(dim: Int): (Tensor[T], Tensor[T]) = {

@@ -647,10 +647,19 @@ object DenseTensorMath {
     implicit ev: TensorNumeric[T]): Tensor[T] = {
     require(_dim >= 0 && _dim < self.nDimension, s"dimension ${_dim + 1} out of range")
     val result = new DenseTensor[T]()
+    mean(self, result, _dim)
+    result
+  }
+
+  def mean[@specialized(Float, Double) T: ClassTag](
+          self: DenseTensor[T],
+          result: Tensor[T],
+          _dim: Int)(implicit ev: TensorNumeric[T]): Unit = {
+    require(_dim >= 0 && _dim < self.nDimension, s"dimension ${_dim + 1} out of range")
     val sizes = self.size()
     sizes(_dim) = 1
-    DenseTensor.resize(result, sizes)
-    DenseTensorDimApply.dimApply2[T](result, self, _dim,
+    result.resize(sizes)
+    DenseTensorDimApply.dimApply2[T](self, result, _dim,
       (rData, rOffset, rStride, rSize, tData, tOffset, tStride, tSize) => {
         var sum = ev.fromType[Int](0)
         var i = 0
@@ -660,7 +669,6 @@ object DenseTensorMath {
         }
         rData(rOffset) = ev.divide(sum, ev.fromType[Int](self.size(_dim + 1)))
       })
-    result
   }
 
   /**

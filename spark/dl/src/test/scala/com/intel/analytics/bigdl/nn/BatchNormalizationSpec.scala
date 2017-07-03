@@ -23,7 +23,8 @@ import org.scalatest.{FlatSpec, Matchers}
 @com.intel.analytics.bigdl.tags.Parallel
 class BatchNormalizationSpec extends FlatSpec with Matchers {
   "A BatchNormalization" should "generate correct output" in {
-    val bn = new BatchNormalization[Double](3)
+    val bn = new BatchNormalizationV2[Double](3, format = "NHWC")
+    val bn2 = new BatchNormalization[Double](3)
     bn.weight(1) = 0.1
     bn.weight(2) = 0.2
     bn.weight(3) = 0.3
@@ -31,13 +32,22 @@ class BatchNormalizationSpec extends FlatSpec with Matchers {
     bn.bias(1) = 0.1
     bn.bias(2) = 0.2
     bn.bias(3) = 0.3
-    val input = Tensor[Double](3, 3)
+
+    bn2.weight(1) = 0.1
+    bn2.weight(2) = 0.2
+    bn2.weight(3) = 0.3
+
+    bn2.bias(1) = 0.1
+    bn2.bias(2) = 0.2
+    bn2.bias(3) = 0.3
+    val input = Tensor[Double](3, 1, 3)
 
     var i = 0
     input.apply1(e => {
       i += 1; i
     })
-    val output = bn.forward(input)
+    val output = bn.forward(input).resize(3, 3)
+    val output2 = bn2.forward(input.resize(3, 3))
 
     output.nDimension() should be(2)
     output.size(1) should be(3)
@@ -52,6 +62,65 @@ class BatchNormalizationSpec extends FlatSpec with Matchers {
     output(Array(3, 2)) should be(0.4449 +- 0.0001)
     output(Array(3, 3)) should be(0.6674 +- 0.0001)
   }
+
+  "A BatchNormalization" should "generate perform well" in {
+    val bn = new BatchNormalizationV2[Double](128, format = "NHWC")
+    val input = Tensor[Double](32, 28, 28, 128).randn()
+
+    val bn1 = new BatchNormalizationV2[Double](128, format = "NCHW")
+    val bn2 = new SpatialBatchNormalization[Double](128)
+    val input2 = Tensor[Double](32, 128, 28, 28).randn()
+
+
+    var i = 0
+    while( i < 10) {
+      bn.forward(input)
+      i = i + 1
+    }
+
+    var time1 = System.nanoTime()
+    i = 0
+    while (i < 100) {
+      bn.forward(input)
+      i = i + 1
+    }
+    var time2 = System.nanoTime()
+
+    println(s"batchNorm2 nhwc ${(time2 - time1)/1e6}")
+
+    i = 0
+    while( i < 10) {
+      bn1.forward(input2)
+      i = i + 1
+    }
+    time1 = System.nanoTime()
+    i = 0
+    while (i < 100) {
+      bn2.forward(input2)
+      i = i + 1
+    }
+    time2 = System.nanoTime()
+
+    println(s"batchNorm2 nchw ${(time2 - time1)/1e6}")
+
+    i = 0
+    while( i < 10) {
+      bn2.forward(input2)
+      i = i + 1
+    }
+    time1 = System.nanoTime()
+    i = 0
+    while (i < 100) {
+      bn2.forward(input2)
+      i = i + 1
+    }
+    time2 = System.nanoTime()
+
+    println(s"batchNorm nchw ${(time2 - time1)/1e6}")
+
+  }
+
+
 
   "A BatchNormalization" should "generate correct output for given weight and bias" in {
     val weight = Tensor[Double](T(0.1, 0.2, 0.3))
