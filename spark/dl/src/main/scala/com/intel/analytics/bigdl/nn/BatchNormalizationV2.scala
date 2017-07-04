@@ -136,30 +136,35 @@ class BatchNormalizationV2[@specialized(Float, Double) T: ClassTag](
   }
 
   override def updateOutput(input: Tensor[T]): Tensor[T] = {
+    val _input = makeBatch(input)
+    updateOutputDouble(_input)
+  }
+
+  private def updateOutputDouble(_input: Tensor[T]): Tensor[T] = {
     //checkInputDim(input)
 
-    output.resizeAs(input)
+    output.resizeAs(_input)
     saveMean.resizeAs(runningMean)
     saveVar.resizeAs(runningVar)
 
-    val _input = makeBatch(input)
+
     val N = _input.size(1)
     val C = if (format == "NCHW") _input.size(2) else _input.size(nDim)
     val H = if (format == "NCHW") _input.size(3) else _input.size(2)
     val W = if (nDim > 3) {
       if (format == "NCHW") {
-        input.size(4)
+        _input.size(4)
       } else {
-        input.size(3)
+        _input.size(3)
       }
     } else {
       1
     }
     val T = if (nDim > 4) {
       if (format == "NCHW") {
-        input.size(5)
+        _input.size(5)
       } else {
-        input.size(4)
+        _input.size(4)
       }
     } else {
       1
@@ -170,7 +175,7 @@ class BatchNormalizationV2[@specialized(Float, Double) T: ClassTag](
     if (train) {
       format match {
         case "NCHW" =>
-          val input2d = input.view(Array(N * C, sampleSize))
+          val input2d = _input.view(Array(N * C, sampleSize))
           val saveMeanOffset = saveMean.storageOffset() - 1
           val saveMeanData = saveMean.storage().array()
           var i = 0
@@ -188,13 +193,14 @@ class BatchNormalizationV2[@specialized(Float, Double) T: ClassTag](
           while (i < N * C) {
             val sample = input2d.select(1, i + 1)
             val index = i % C + saveStdOffset
-            val sum = calcSumOfSquare(sample, saveMeanData(index))
-            saveStdData(index) = ev.plus(saveStdData(index), sum)
+            val sum = calcSumOfSquareDouble(sample.asInstanceOf[Tensor[Double]],
+              saveMeanData(index).asInstanceOf[Double])
+            saveStdData(index) = ev.plus(saveStdData(index), sum.asInstanceOf[T])
             i = i + 1
           }
           saveVar.div(ev.fromType(N*sampleSize))
         case "NHWC" =>
-          val input2d = input.view(Array(N * sampleSize, C))
+          val input2d = _input.view(Array(N * sampleSize, C))
           var i = 0
           while (i < N * sampleSize) {
             val channels = input2d.select(1, i + 1)
@@ -238,7 +244,7 @@ class BatchNormalizationV2[@specialized(Float, Double) T: ClassTag](
     format match {
       case "NCHW" =>
         val output2d = output.view(Array(N*C, sampleSize))
-        val input2d = input.view(Array(N*C, sampleSize))
+        val input2d = _input.view(Array(N*C, sampleSize))
         var i = 0
         while (i < N*C) {
           val inSlice = input2d.select(1, i + 1)
@@ -249,7 +255,7 @@ class BatchNormalizationV2[@specialized(Float, Double) T: ClassTag](
 
       case "NHWC" =>
         val output2d = output.view(Array(N*sampleSize, C))
-        val input2d = input.view(Array(N*sampleSize, C))
+        val input2d = _input.view(Array(N*sampleSize, C))
         var i = 0
         while (i < N*sampleSize) {
           val inSlice = input2d.select(1, i + 1)
@@ -257,7 +263,9 @@ class BatchNormalizationV2[@specialized(Float, Double) T: ClassTag](
           outSlice.cmul(inSlice, w).add(b)
           i = i + 1
         }
+
     }
+
     output
   }
 
@@ -271,6 +279,21 @@ class BatchNormalizationV2[@specialized(Float, Double) T: ClassTag](
     while (i < numOfElem) {
       val diff = ev.minus(data(offset + i), mean)
       sum = ev.plus(sum, ev.times(diff, diff))
+      i = i + 1
+    }
+    sum
+  }
+
+  @inline
+  private def calcSumOfSquareDouble(input: Tensor[Double], mean: Double): Double = {
+    val offset = input.storageOffset() - 1
+    val data = input.storage()
+    val numOfElem = input.nElement()
+    var i = 0
+    var sum = 0.0
+    while (i < numOfElem) {
+      val diff = data(offset + i) - mean
+      sum += diff * diff
       i = i + 1
     }
     sum
