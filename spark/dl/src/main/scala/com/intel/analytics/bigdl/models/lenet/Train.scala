@@ -48,7 +48,7 @@ object Train {
       val model = if (param.modelSnapshot.isDefined) {
         Module.load[Float](param.modelSnapshot.get)
       } else {
-        LeNet5(classNum = 10)
+        LeNet5(classNum = 10, param.format)
       }
 
       val optimMethod = if (param.stateSnapshot.isDefined) {
