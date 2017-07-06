@@ -285,79 +285,65 @@ class TensorflowLoaderSpec extends TensorflowSpecHelper{
   }
 
   "Tensorflow lenet" should "be load correctly" in {
-    testModelForward("lenet", Seq("LeNet/pool2/MaxPool:0"), true).foreach {
+    testModelForward("lenet", Seq("LeNet/pool2/MaxPool:0")).foreach {
       case(tf, bigdl) =>
-        val transpose = bigdl.transpose(2, 3).transpose(3, 4)
-        tf.almostEqual(transpose, 1e-6) should be(true)
+        tf.almostEqual(bigdl, 1e-6) should be(true)
     }
-    testModelBackward("lenet", Seq("LeNet/pool2/MaxPool:0"), true,
-      Seq((4, 3), (3, 2))).foreach {
+    testModelBackward("lenet", Seq("LeNet/pool2/MaxPool:0")).foreach {
       case(tf, bigdl) =>
-        if (tf.dim() == 4) {
-          val trans = tf.transpose(1, 4).transpose(2, 3).transpose(3, 4).contiguous()
-          trans.almostEqual(bigdl, 1e-4) should be(true)
-        }
-        else {
           tf.almostEqual(bigdl, 1e-4) should be(true)
-        }
     }
   }
 
   "Tensorflow Alexnet" should "be load correctly" in {
-    testModelForward("alexnet", Seq("alexnet_v2/fc8/squeezed:0"), true).foreach {
+    testModelForward("alexnet", Seq("alexnet_v2/fc8/squeezed:0")).foreach {
       case(tf, bigdl) =>
-        tf.almostEqual(bigdl, 1e-7) should be(true)
+        tf.almostEqual(bigdl, 1e-6) should be(true)
     }
-    testModelBackward("alexnet", Seq("alexnet_v2/fc8/squeezed:0"), true,
-      Seq.empty).foreach {
+    testModelBackward("alexnet", Seq("alexnet_v2/fc8/squeezed:0")).foreach {
       case(tf, bigdl) =>
-        if (tf.dim() == 4) {
-          val trans = tf.transpose(1, 4).transpose(2, 3).transpose(3, 4).contiguous()
-          trans.almostEqual(bigdl, 1e-4) should be(true)
-        }
-        else {
-          tf.almostEqual(bigdl, 1e-4) should be(true)
-        }
+        tf.almostEqual(bigdl, 1e-4) should be(true)
+
     }
   }
 
   "TensorFlow vgg_a" should "be load correctly" in {
-    testModelForward("vgga", Seq("vgg_a/fc8/squeezed:0"), true).foreach {
+    testModelForward("vgga", Seq("vgg_a/fc8/squeezed:0")).foreach {
       case(tf, bigdl) =>
-        tf.almostEqual(bigdl, 1e-7) should be(true)
+        tf.almostEqual(bigdl, 1e-6) should be(true)
     }
   }
 
   "TensorFlow vgg_16" should "be load correctly" in {
-    testModelForward("vgg16", Seq("vgg_16/fc8/squeezed:0"), true).foreach {
+    testModelForward("vgg16", Seq("vgg_16/fc8/squeezed:0")).foreach {
       case(tf, bigdl) =>
-        tf.almostEqual(bigdl, 1e-7) should be(true)
+        tf.almostEqual(bigdl, 1e-6) should be(true)
     }
   }
 
   "TensorFlow vgg_19" should "be load correctly" in {
-    testModelForward("vgg19", Seq("vgg_19/fc8/squeezed:0"), true).foreach {
+    testModelForward("vgg19", Seq("vgg_19/fc8/squeezed:0")).foreach {
       case(tf, bigdl) =>
-        tf.almostEqual(bigdl, 1e-7) should be(true)
+        tf.almostEqual(bigdl, 1e-6) should be(true)
     }
   }
 
   "TensorFlow overfeat" should "be load correctly" in {
-    testModelForward("overfeat", Seq("overfeat/fc8/squeezed:0"), true).foreach {
+    testModelForward("overfeat", Seq("overfeat/fc8/squeezed:0")).foreach {
       case(tf, bigdl) =>
-        tf.almostEqual(bigdl, 1e-7) should be(true)
+        tf.almostEqual(bigdl, 1e-6) should be(true)
     }
   }
 
   "TensorFlow inception_v3" should "be load correctly" in {
-    testModelForward("inception_v3", Seq("InceptionV3/Logits/SpatialSqueeze:0"), true).foreach {
+    testModelForward("inception_v3", Seq("InceptionV3/Logits/SpatialSqueeze:0")).foreach {
       case(tf, bigdl) =>
-        tf.almostEqual(bigdl, 1e-7) should be(true)
+        tf.almostEqual(bigdl, 1e-6) should be(true)
     }
   }
 
   "TensorFlow resnet_v1" should "be load correctly" in {
-    testModelForward("resnet_v1", Seq("resnet_v1_101/SpatialSqueeze:0"), true).foreach {
+    testModelForward("resnet_v1", Seq("resnet_v1_101/SpatialSqueeze:0")).foreach {
       case(tf, bigdl) =>
         tf.almostEqual(bigdl, 1e-6) should be(true)
     }
@@ -365,14 +351,14 @@ class TensorflowLoaderSpec extends TensorflowSpecHelper{
 
   "TensorFlow inception_resnet_v2" should "be load correctly" in {
     testModelForward("inception_resnet_v2", Seq("InceptionResnetV2/Logits/Logits/BiasAdd:0",
-      "InceptionResnetV2/AuxLogits/Logits/BiasAdd:0"), true).foreach {
+      "InceptionResnetV2/AuxLogits/Logits/BiasAdd:0")).foreach {
       case(tf, bigdl) =>
-        tf.almostEqual(bigdl, 1e-7) should be(true)
+        tf.almostEqual(bigdl, 1e-6) should be(true)
     }
   }
 
 
-  private def testModelForward(modelName: String, endPoints: Seq[String], transInput: Boolean)
+  private def testModelForward(modelName: String, endPoints: Seq[String])
   : Seq[(Tensor[Float], Tensor[Float])] = {
 
     tfCheck()
@@ -409,16 +395,10 @@ class TensorflowLoaderSpec extends TensorflowSpecHelper{
     val input = TensorflowToBigDL.toTensor(tfInputTensor,
       ByteOrder.LITTLE_ENDIAN)
 
-    val transposeInput = if (transInput) {
-      input.transpose(2, 4).transpose(3, 4).contiguous()
-    } else {
-      input
-    }
-
     val bigdlOutputs = if (endPoints.length == 1) {
-      Seq(model.forward(transposeInput).toTensor)
+      Seq(model.forward(input).toTensor)
     } else {
-      val t = model.forward(transposeInput).toTable
+      val t = model.forward(input).toTable
       (1 to endPoints.length).map(t[Tensor[Float]](_))
     }
 
@@ -433,9 +413,7 @@ class TensorflowLoaderSpec extends TensorflowSpecHelper{
 
   private def testModelBackward(
     modelName: String,
-    endPoints: Seq[String],
-    transInput: Boolean,
-    transOutputSeq: Seq[(Int, Int)]): Seq[(Tensor[Float], Tensor[Float])] = {
+    endPoints: Seq[String]): Seq[(Tensor[Float], Tensor[Float])] = {
 
     tfCheck()
     // Generate command and prepare the temp folder
@@ -469,16 +447,10 @@ class TensorflowLoaderSpec extends TensorflowSpecHelper{
     val input = TensorflowToBigDL.toTensor(tfInputTensor,
       ByteOrder.LITTLE_ENDIAN)
 
-    val transposeInput = if (transInput) {
-      input.transpose(2, 4).transpose(3, 4).contiguous()
-    } else {
-      input
-    }
-
     val bigdlOutputs = if (endPoints.length == 1) {
-      Seq(model.forward(transposeInput).toTensor)
+      Seq(model.forward(input).toTensor)
     } else {
-      val t = model.forward(transposeInput).toTable
+      val t = model.forward(input).toTable
       (1 to endPoints.length).map(t[Tensor[Float]](_))
     }
 
@@ -488,9 +460,6 @@ class TensorflowLoaderSpec extends TensorflowSpecHelper{
         val t = tfNodes.asScala.filter(_.getName == s"grad_input$i")(0)
           .getAttrMap.get("value").getTensor
         var tensor = TensorflowToBigDL.toTensor(t, ByteOrder.LITTLE_ENDIAN)
-        for (trans <- transOutputSeq) {
-          tensor = tensor.transpose(trans._1, trans._2)
-        }
         tensor.contiguous()
     }
 
@@ -513,7 +482,7 @@ class TensorflowLoaderSpec extends TensorflowSpecHelper{
     // do backward for each output and its corresponding gradient input
     for (i <- 0 until gradInputs.length) {
       // println(s"grad $i")
-      model.backward(transposeInput, gradInputs(i))
+      model.backward(input, gradInputs(i))
       val pairs = context.keySet.map{
         x =>
           val name = s"${x.getName}_grad$i"
