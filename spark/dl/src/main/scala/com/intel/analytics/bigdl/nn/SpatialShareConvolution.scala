@@ -146,7 +146,7 @@ class SpatialShareConvolution[T: ClassTag](
           gradOutput.narrow(1, g * nOutputPlane / nGroup + 1, nOutputPlane / nGroup),
           weightMM.select(1, g + 1).transpose(1, 2),
           fGradInput.select(1, g + 1),
-          kernelW, kernelH, strideW, strideH, padW, padH)
+          kernelW, kernelH, strideW, strideH, padW, padH, outputHeight, outputWidth)
         g += 1
       }
     } else {
@@ -180,7 +180,7 @@ class SpatialShareConvolution[T: ClassTag](
                 gradOutputT.narrow(1, g * nOutputPlane / nGroup + 1, nOutputPlane / nGroup),
                 weightMM.select(1, g + 1).transpose(1, 2),
                 fgradInputT.select(1, g + 1),
-                kernelW, kernelH, strideW, strideH, padW, padH)
+                kernelW, kernelH, strideW, strideH, padW, padH, outputHeight, outputWidth)
               g += 1
             }
             _i += 1

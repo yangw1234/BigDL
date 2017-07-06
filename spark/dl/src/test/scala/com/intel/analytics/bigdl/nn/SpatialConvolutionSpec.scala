@@ -199,28 +199,29 @@ class SpatialConvolutionSpec extends FlatSpec with Matchers {
 
   "A SpatialConvolutionNHWC layer" should "generate correct output" in {
     import tensor.TensorNumericMath.TensorNumeric.NumericDouble
-    case class conv(nIn: Int, nOut: Int, kW: Int, kH: Int, dW: Int, dH: Int, pW: Int, pH: Int)
+    case class Conv(nIn: Int, nOut: Int, kW: Int,
+                    kH: Int, dW: Int, dH: Int, pW: Int, pH: Int)
     val params = List(
-      conv(1, 1, 3, 3, 1, 1, 0, 0),
-      conv(1, 1, 1, 1, 1, 1, 0, 0),
-      conv(1, 1, 5, 5, 1, 1, 0, 0),
-      conv(4, 4, 3, 3, 1, 1, 0, 0),
-      conv(4, 4, 1, 1, 1, 1, 0, 0),
-      conv(4, 4, 5, 5, 1, 1, 0, 0),
-      conv(4, 4, 3, 3, 2, 2, 0, 0),
-      conv(4, 4, 1, 1, 2, 2, 0, 0),
-      conv(4, 4, 5, 5, 2, 2, 0, 0),
-      conv(4, 4, 3, 3, 2, 2, 1, 1),
-      conv(4, 4, 1, 1, 2, 2, 1, 1),
-      conv(4, 4, 5, 5, 2, 2, 1, 1)
+      Conv(1, 1, 3, 3, 1, 1, 0, 0),
+      Conv(1, 1, 1, 1, 1, 1, 0, 0),
+      Conv(1, 1, 5, 5, 1, 1, 0, 0),
+      Conv(4, 4, 3, 3, 1, 1, 0, 0),
+      Conv(4, 4, 1, 1, 1, 1, 0, 0),
+      Conv(4, 4, 5, 5, 1, 1, 0, 0),
+      Conv(4, 4, 3, 3, 2, 2, 0, 0),
+      Conv(4, 4, 1, 1, 2, 2, 0, 0),
+      Conv(4, 4, 5, 5, 2, 2, 0, 0),
+      Conv(4, 4, 3, 3, 2, 2, 1, 1),
+      Conv(4, 4, 1, 1, 2, 2, 1, 1),
+      Conv(4, 4, 5, 5, 2, 2, 1, 1)
     )
 
     for (param <- params) {
       println(param)
       val layer = new SpatialConvolution(param.nIn, param.nOut,
         param.kW, param.kH, param.dW, param.dH, param.pW, param.pH)
-      val layerNHWC = new SpatialConvolutionNHWC(param.nIn, param.nOut,
-        param.kW, param.kH, param.dW, param.dH, param.pW, param.pH)
+      val layerNHWC = new SpatialConvolution(param.nIn, param.nOut,
+        param.kW, param.kH, param.dW, param.dH, param.pW, param.pH, format = InputFormat.NHWC)
 
       val input = Tensor(Array(4, param.nIn, 7, 7)).randn()
 
@@ -250,20 +251,17 @@ class SpatialConvolutionSpec extends FlatSpec with Matchers {
 
       outputNHWC.transpose(2, 4).transpose(3, 4)
         .sub(output).pow(2).sum() should be < 1e-7
+
       gradInputNHWC.transpose(2, 4).transpose(3, 4)
         .sub(gradInput).pow(2).sum() should be < 1e-7
+
+      layer.updateParameters(0.01)
+      layerNHWC.updateParameters(0.01)
 
       val transWeight = layerNHWC.weight.transpose(1, 4).transpose(2, 3).transpose(3, 4)
       transWeight.sub(layer.weight).pow(2).sum() should be < 1e-7
 
     }
-  }
-
-  "A spatialConvolution layer" should "perform well" in {
-
-    println("nchw")
-    ConvPerf.test1(0, 11)
-
   }
 
   "A SpatialConvolution layer" should "generate correct output with given weight" in {

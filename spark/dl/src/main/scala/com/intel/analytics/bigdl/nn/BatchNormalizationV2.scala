@@ -373,11 +373,11 @@ class BatchNormalizationV2[@specialized(Float, Double) T: ClassTag](
   override def updateGradInput(input: Tensor[T], gradOutput: Tensor[T]): Tensor[T] = {
     backward(input, gradOutput, ev.fromType[Int](1), gradInput, null, null)
   }
-
+/*
   override def accGradParameters(input: Tensor[T], gradOutput: Tensor[T], scale: Double): Unit = {
     backward(input, gradOutput, ev.fromType[Double](scale), null, gradWeight, gradBias)
   }
-
+*/
   override def backward(input: Tensor[T], gradOutput: Tensor[T]): Tensor[T] = {
     checkInputDim(input)
     checkInputDim(gradOutput)

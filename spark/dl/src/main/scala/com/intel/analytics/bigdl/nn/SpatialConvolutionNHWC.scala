@@ -252,7 +252,7 @@ class SpatialConvolutionNHWC[T: ClassTag](
 
     return gradInput
   }
-
+/*
   override def accGradParameters(input: Tensor[T], gradOutput: Tensor[T],
     scale: Double = 1.0): Unit = {
     require(input.nDimension() == 3 || input.nDimension() == 4, "Only support 3D or 4D input")
@@ -310,13 +310,13 @@ class SpatialConvolutionNHWC[T: ClassTag](
     }
 
     if (null != wRegularizer) {
-      wRegularizer.accRegularization(weight, gradWeight)
+      //wRegularizer.accRegularization(weight, gradWeight)
     }
     if (null != bRegularizer) {
-      bRegularizer.accRegularization(bias, gradBias)
+      //bRegularizer.accRegularization(bias, gradBias)
     }
   }
-
+*/
   override def updateParameters(learningRate: T): Unit = {
     weight.map(gradWeight, (a, b) => ev.minus(a, ev.times(learningRate, b)))
     bias.map(gradBias, (a, b) => ev.minus(a, ev.times(learningRate, b)))
