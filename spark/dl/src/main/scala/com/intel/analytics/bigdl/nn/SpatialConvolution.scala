@@ -54,7 +54,7 @@ class SpatialConvolution[T: ClassTag](
   val initBias: Tensor[T] = null,
   val initGradWeight: Tensor[T] = null,
   val initGradBias: Tensor[T] = null,
-  format: InputFormat = InputFormat.NCHW
+  val format: InputFormat = InputFormat.NCHW
 )(implicit ev: TensorNumeric[T]) extends TensorModule[T] with Initializable {
 
   require(nInputPlane % nGroup == 0, "Number of input channels should be multiples of group.")
@@ -67,14 +67,14 @@ class SpatialConvolution[T: ClassTag](
     case InputFormat.NCHW =>
       Array(nGroup, nOutputPlane / nGroup, nInputPlane / nGroup, kernelH, kernelW)
     case InputFormat.NHWC =>
-      Array(kernelH, kernelW, nInputPlane, nOutputPlane)
+      Array(1, kernelH, kernelW, nInputPlane, nOutputPlane)
   }
 
   private val weightFormat = format match {
     case InputFormat.NCHW =>
       VariableFormat.GP_OUT_IN_KW_KH
     case InputFormat.NHWC =>
-      VariableFormat.KH_KW_IN_OUT
+      VariableFormat.GP_KH_KW_IN_OUT
   }
 
   private val weightMMShape = format match {

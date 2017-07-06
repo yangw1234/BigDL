@@ -233,8 +233,8 @@ class SpatialConvolutionSpec extends FlatSpec with Matchers {
       val kernel = Tensor(Array(param.nOut, param.nIn, param.kH, param.kW)).randn()
       val bias = Tensor(Array(param.nOut)).randn()
 
-      val kernelNHWC = Tensor(Array(param.nOut, param.nIn, param.kH, param.kW))
-        .copy(kernel).transpose(1, 4).transpose(2, 3).transpose(1, 2).contiguous()
+      val kernelNHWC = Tensor(Array(1, param.nOut, param.nIn, param.kH, param.kW))
+        .copy(kernel).transpose(2, 5).transpose(3, 4).transpose(2, 3).contiguous()
       val biasNHWC = Tensor(Array(param.nOut)).copy(bias)
 
       layer.weight.copy(kernel)
@@ -260,7 +260,7 @@ class SpatialConvolutionSpec extends FlatSpec with Matchers {
       layer.updateParameters(0.01)
       layerNHWC.updateParameters(0.01)
 
-      val transWeight = layerNHWC.weight.transpose(1, 4).transpose(2, 3).transpose(3, 4)
+      val transWeight = layerNHWC.weight.transpose(2, 5).transpose(3, 4).transpose(4, 5)
       transWeight.sub(layer.weight).pow(2).sum() should be < 1e-7
 
     }

@@ -18,6 +18,8 @@ package com.intel.analytics.bigdl.nn.abstractnn
 
 sealed trait InputFormat {
   def getHWCDims(inputDims: Int): (Int, Int, Int)
+
+  val value: String
 }
 
 object InputFormat {
@@ -31,10 +33,14 @@ object InputFormat {
     def getHWCDims(inputDims: Int): (Int, Int, Int) = {
       if (inputDims == 3) (2, 3, 1) else (3, 4, 2)
     }
+
+    val value = "NCHW"
   }
   case object NHWC extends InputFormat {
     def getHWCDims(inputDims: Int): (Int, Int, Int) = {
       if (inputDims == 3) (1, 2, 3) else (2, 3, 4)
     }
+
+    val value = "NHWC"
   }
 }

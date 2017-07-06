@@ -53,7 +53,7 @@ class SpatialAveragePooling[@specialized(Float, Double) T: ClassTag](
   private var ceilMode: Boolean = false,
   private var countIncludePad: Boolean = true,
   private var divide: Boolean = true,
-  format: InputFormat = InputFormat.NCHW
+  val format: InputFormat = InputFormat.NCHW
 )(implicit ev: TensorNumeric[T]) extends TensorModule[T] {
 
   @transient

@@ -129,14 +129,14 @@ object VariableFormat {
     }
   }
 
-  case object KH_KW_IN_OUT extends VariableFormat {
+  case object GP_KH_KW_IN_OUT extends VariableFormat {
     override def getFanIn(shape: Array[Int]): Int = {
-      val receptiveFieldSize = shape(0) * shape(1)
+      val receptiveFieldSize = shape(0) * shape(1) * shape(2)
       shape(2) * receptiveFieldSize
     }
 
     override def getFanOut(shape: Array[Int]): Int = {
-      val receptiveFieldSize = shape(0) * shape(1)
+      val receptiveFieldSize = shape(0) * shape(1) * shape(2)
       shape(3) * receptiveFieldSize
     }
   }
