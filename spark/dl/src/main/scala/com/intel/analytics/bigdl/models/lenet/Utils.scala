@@ -41,8 +41,7 @@ object Utils {
     maxEpoch: Int = 15,
     coreNumber: Int = -1,
     nodeNumber: Int = -1,
-    overWriteCheckpoint: Boolean = false,
-    format: String = "NCHW"
+    overWriteCheckpoint: Boolean = false
   )
 
   val trainParser = new OptionParser[TrainParams]("BigDL Lenet Train Example") {
@@ -76,9 +75,6 @@ object Utils {
     opt[Unit]("overWrite")
       .text("overwrite checkpoint files")
       .action( (_, c) => c.copy(overWriteCheckpoint = true) )
-    opt[String]("format")
-      .text("format of the input")
-      .action( (x, c) => c.copy(format = x) )
   }
 
   case class TestParams(

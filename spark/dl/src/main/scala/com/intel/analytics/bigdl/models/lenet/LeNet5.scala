@@ -21,7 +21,7 @@ import com.intel.analytics.bigdl.numeric.NumericFloat
 import com.intel.analytics.bigdl.nn._
 
 object LeNet5 {
-  def apply(classNum: Int, format: String = "NCHW"): Module[Float] = {
+  def apply(classNum: Int): Module[Float] = {
     val model = Sequential()
     model.add(Reshape(Array(1, 28, 28)))
       .add(SpatialConvolution(1, 6, 5, 5).setName("conv1_5x5"))
@@ -35,25 +35,5 @@ object LeNet5 {
       .add(Tanh())
       .add(Linear(100, classNum).setName("fc2"))
       .add(LogSoftMax())
-
-    val modelNHWC = Sequential()
-    modelNHWC.add(Reshape(Array(28, 28, 1)))
-      .add(SpatialConvolutionNHWC(1, 6, 5, 5).setName("conv1_5x5"))
-      .add(Tanh())
-      .add(SpatialMaxPoolingNHWC(2, 2, 2, 2))
-      .add(Tanh())
-      .add(SpatialConvolutionNHWC(6, 12, 5, 5).setName("conv2_5x5"))
-      .add(SpatialMaxPoolingNHWC(2, 2, 2, 2))
-      .add(Reshape(Array(12 * 4 * 4)))
-      .add(Linear(12 * 4 * 4, 100).setName("fc1"))
-      .add(Tanh())
-      .add(Linear(100, classNum).setName("fc2"))
-      .add(LogSoftMax())
-
-    if (format == "NCWH") {
-      model
-    } else {
-      modelNHWC
-    }
   }
 }
