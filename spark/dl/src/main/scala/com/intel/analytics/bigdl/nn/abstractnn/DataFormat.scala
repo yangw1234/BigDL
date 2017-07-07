@@ -16,27 +16,27 @@
 
 package com.intel.analytics.bigdl.nn.abstractnn
 
-sealed trait InputFormat {
+sealed trait DataFormat {
   def getHWCDims(inputDims: Int): (Int, Int, Int)
 
   val value: String
 }
 
-object InputFormat {
-  def getFormat(formatString: String): InputFormat = {
+object DataFormat {
+  def getFormat(formatString: String): DataFormat = {
     formatString.toUpperCase match {
       case "NHWC" => NHWC
       case "NCHW" => NCHW
     }
   }
-  case object NCHW extends InputFormat {
+  case object NCHW extends DataFormat {
     def getHWCDims(inputDims: Int): (Int, Int, Int) = {
       if (inputDims == 3) (2, 3, 1) else (3, 4, 2)
     }
 
     val value = "NCHW"
   }
-  case object NHWC extends InputFormat {
+  case object NHWC extends DataFormat {
     def getHWCDims(inputDims: Int): (Int, Int, Int) = {
       if (inputDims == 3) (1, 2, 3) else (2, 3, 4)
     }

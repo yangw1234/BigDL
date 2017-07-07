@@ -16,7 +16,7 @@
 
 package com.intel.analytics.bigdl.nn
 
-import com.intel.analytics.bigdl.nn.abstractnn.{InputFormat, TensorModule}
+import com.intel.analytics.bigdl.nn.abstractnn.{DataFormat, TensorModule}
 import com.intel.analytics.bigdl.tensor.Tensor
 import com.intel.analytics.bigdl.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.bigdl.utils.Engine
@@ -42,13 +42,13 @@ import scala.reflect._
 @SerialVersionUID(2277597677473874749L)
 class SpatialMaxPooling[T: ClassTag](
   val kW: Int, val kH: Int, val dW: Int, val dH: Int, val padW: Int = 0, val padH: Int = 0,
-  val format: InputFormat = InputFormat.NCHW)(implicit ev: TensorNumeric[T]) extends TensorModule[T] {
+  val format: DataFormat = DataFormat.NCHW)(implicit ev: TensorNumeric[T]) extends TensorModule[T] {
 
   var ceil_mode = false
   val indices = Tensor[T]()
 
   def this(kW: Int, kH: Int)(implicit ev: TensorNumeric[T]) {
-    this(kW, kH, kW, kH, format = InputFormat.NCHW)
+    this(kW, kH, kW, kH, format = DataFormat.NCHW)
   }
 
   /**
@@ -98,7 +98,7 @@ class SpatialMaxPooling[T: ClassTag](
 
     if (input.dim() == 3) {
       format match {
-        case InputFormat.NCHW =>
+        case DataFormat.NCHW =>
           output.resize(Array(nslices, oheight, owidth))
           /* indices will contain the locations for each output point */
           indices.resize(Array(nslices, oheight, owidth))
@@ -117,7 +117,7 @@ class SpatialMaxPooling[T: ClassTag](
           } else {
             throw new IllegalArgumentException
           }
-        case InputFormat.NHWC =>
+        case DataFormat.NHWC =>
           output.resize(Array(oheight, owidth, nslices))
           /* indices will contain the locations for each output point */
           indices.resize(Array(oheight, owidth, nslices))
@@ -140,7 +140,7 @@ class SpatialMaxPooling[T: ClassTag](
     } else {
       val nbatch = input.size(1)
       format match {
-        case InputFormat.NCHW =>
+        case DataFormat.NCHW =>
           output.resize(Array(nbatch, nslices, oheight, owidth))
           indices.resize(Array(nbatch, nslices, oheight, owidth))
           if (classTag[T] == classTag[Double]) {
@@ -176,7 +176,7 @@ class SpatialMaxPooling[T: ClassTag](
           } else {
             throw new IllegalArgumentException
           }
-        case InputFormat.NHWC =>
+        case DataFormat.NHWC =>
           output.resize(Array(nbatch, oheight, owidth, nslices))
           indices.resize(Array(nbatch, oheight, owidth, nslices))
           if (classTag[T] == classTag[Double]) {
@@ -231,7 +231,7 @@ class SpatialMaxPooling[T: ClassTag](
     gradInput.zero()
     if (input.dim() == 3) {
       format match {
-        case InputFormat.NCHW =>
+        case DataFormat.NCHW =>
           if (classTag[T] == classTag[Double]) {
             NNPrimitive.maxPoolingBackwardDouble(
               gradInput.asInstanceOf[Tensor[Double]],
@@ -247,7 +247,7 @@ class SpatialMaxPooling[T: ClassTag](
           } else {
             throw new IllegalArgumentException
           }
-        case InputFormat.NHWC =>
+        case DataFormat.NHWC =>
           if (classTag[T] == classTag[Double]) {
             NNPrimitive.maxPoolingBackwardDoubleNHWC(
               gradInput.asInstanceOf[Tensor[Double]],
@@ -268,7 +268,7 @@ class SpatialMaxPooling[T: ClassTag](
     else {
       val nbacth = input.size(1)
       format match {
-        case InputFormat.NCHW =>
+        case DataFormat.NCHW =>
           if (classTag[T] == classTag[Double]) {
             Engine.model.invokeAndWait(
               (1 to nbacth).map(k => () => {
@@ -300,7 +300,7 @@ class SpatialMaxPooling[T: ClassTag](
           } else {
             throw new IllegalArgumentException
           }
-        case InputFormat.NHWC =>
+        case DataFormat.NHWC =>
           if (classTag[T] == classTag[Double]) {
             Engine.model.invokeAndWait(
               (1 to nbacth).map(k => () => {
@@ -396,7 +396,7 @@ object SpatialMaxPooling {
       dH: Int = 1,
       padW: Int = 0,
       padH: Int = 0,
-      format: InputFormat = InputFormat.NCHW)
+      format: DataFormat = DataFormat.NCHW)
       (implicit ev: TensorNumeric[T]): SpatialMaxPooling[T] = {
     new SpatialMaxPooling[T](kW, kH, dW, dH, padW, padH, format)
   }

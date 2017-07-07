@@ -16,7 +16,7 @@
 
 package com.intel.analytics.bigdl.nn
 
-import com.intel.analytics.bigdl.nn.abstractnn.{Initializable, InputFormat, TensorModule}
+import com.intel.analytics.bigdl.nn.abstractnn.{Initializable, DataFormat, TensorModule}
 import com.intel.analytics.bigdl.optim.Regularizer
 import com.intel.analytics.bigdl.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.bigdl.tensor._
@@ -54,33 +54,33 @@ class SpatialConvolution[T: ClassTag](
   val initBias: Tensor[T] = null,
   val initGradWeight: Tensor[T] = null,
   val initGradBias: Tensor[T] = null,
-  val format: InputFormat = InputFormat.NCHW
+  val format: DataFormat = DataFormat.NCHW
 )(implicit ev: TensorNumeric[T]) extends TensorModule[T] with Initializable {
 
   require(nInputPlane % nGroup == 0, "Number of input channels should be multiples of group.")
   require(nOutputPlane % nGroup == 0, "Number of output channels should be multiples of group.")
   if (nGroup != 1) {
-    require(format == InputFormat.NCHW, "group convolution is not supported in NHWC format " )
+    require(format == DataFormat.NCHW, "group convolution is not supported in NHWC format " )
   }
 
   private val weightShape = format match {
-    case InputFormat.NCHW =>
+    case DataFormat.NCHW =>
       Array(nGroup, nOutputPlane / nGroup, nInputPlane / nGroup, kernelH, kernelW)
-    case InputFormat.NHWC =>
+    case DataFormat.NHWC =>
       Array(1, kernelH, kernelW, nInputPlane, nOutputPlane)
   }
 
   private val weightFormat = format match {
-    case InputFormat.NCHW =>
+    case DataFormat.NCHW =>
       VariableFormat.GP_OUT_IN_KW_KH
-    case InputFormat.NHWC =>
+    case DataFormat.NHWC =>
       VariableFormat.GP_KH_KW_IN_OUT
   }
 
   private val weightMMShape = format match {
-    case InputFormat.NCHW =>
+    case DataFormat.NCHW =>
       Array(nGroup, nOutputPlane / nGroup, nInputPlane * kernelH * kernelW / nGroup)
-    case InputFormat.NHWC =>
+    case DataFormat.NHWC =>
       Array(1, nInputPlane * kernelH * kernelW, nOutputPlane)
   }
 
@@ -146,13 +146,13 @@ class SpatialConvolution[T: ClassTag](
 
   private def getOutputShape(oh: Int, ow: Int, batchSize: Int = -1): Array[Int] = {
     format match {
-      case InputFormat.NCHW =>
+      case DataFormat.NCHW =>
         if (batchSize == -1) {
           Array(nOutputPlane, oh, ow)
         } else {
           Array(batchSize, nOutputPlane, oh, ow)
         }
-      case InputFormat.NHWC =>
+      case DataFormat.NHWC =>
         if (batchSize == -1) {
           Array(oh, ow, nOutputPlane)
         } else {
@@ -164,13 +164,13 @@ class SpatialConvolution[T: ClassTag](
 
   private def getFInputShape(oh: Int, ow: Int, batchSize: Int = -1): Array[Int] = {
     format match {
-      case InputFormat.NCHW =>
+      case DataFormat.NCHW =>
         if (batchSize == -1) {
           Array(nGroup, kernelW * kernelH * nInputPlane / nGroup, oh * ow)
         } else {
           Array(batchSize, nGroup, kernelW * kernelH * nInputPlane / nGroup, oh * ow)
         }
-      case InputFormat.NHWC =>
+      case DataFormat.NHWC =>
         if (batchSize == -1) {
           Array(1, oh * ow, kernelW * kernelH * nInputPlane)
         } else {
@@ -333,9 +333,9 @@ class SpatialConvolution[T: ClassTag](
   }
 
   private def getGradWeightMMInBatchShape(batchSize: Int) = format match {
-    case InputFormat.NCHW =>
+    case DataFormat.NCHW =>
       Array(batchSize, nGroup, nOutputPlane / nGroup, nInputPlane * kernelH * kernelW / nGroup)
-    case InputFormat.NHWC =>
+    case DataFormat.NHWC =>
       Array(batchSize, 1, nInputPlane * kernelH * kernelW, nOutputPlane)
   }
 
@@ -508,7 +508,7 @@ class SpatialConvolution[T: ClassTag](
     implicit ev: TensorNumeric[T]): Unit = {
 
     format match {
-      case InputFormat.NCHW =>
+      case DataFormat.NCHW =>
         val output2d = output.view(nOutputPlane, outputHeight * outputWidth)
         if (!_1x1) {
           ev.getType() match {
@@ -529,7 +529,7 @@ class SpatialConvolution[T: ClassTag](
         }
         output2d.addmm(ev.fromType[Int](0), output2d, ev.fromType[Int](1), weight, fInput)
         output2d.addr(ev.fromType(1), bias, onesBias)
-      case InputFormat.NHWC =>
+      case DataFormat.NHWC =>
         val output2d = output.view(outputHeight * outputWidth, nOutputPlane)
         if (!_1x1) {
           ev.getType() match {
@@ -564,7 +564,7 @@ class SpatialConvolution[T: ClassTag](
         val weightDouble = weight.asInstanceOf[Tensor[Double]]
         val gradInputDouble = gradInput.asInstanceOf[Tensor[Double]]
         format match {
-          case InputFormat.NCHW =>
+          case DataFormat.NCHW =>
             val channel = gradOutDouble.size(1)
             val oh = gradOutDouble.size(2)
             val ow = gradOutDouble.size(3)
@@ -579,7 +579,7 @@ class SpatialConvolution[T: ClassTag](
                 gradOutput.size(3), gradOutput.size(2))
               col2imTime += System.nanoTime() - before
             }
-          case InputFormat.NHWC =>
+          case DataFormat.NHWC =>
             val channel = gradOutDouble.size(3)
             val oh = gradOutDouble.size(1)
             val ow = gradOutDouble.size(2)
@@ -601,7 +601,7 @@ class SpatialConvolution[T: ClassTag](
         val weightFloat = weight.asInstanceOf[Tensor[Float]]
         val gradInputFloat = gradInput.asInstanceOf[Tensor[Float]]
         format match {
-          case InputFormat.NCHW =>
+          case DataFormat.NCHW =>
             val channel = gradOutFloat.size(1)
             val oh = gradOutFloat.size(2)
             val ow = gradOutFloat.size(3)
@@ -616,7 +616,7 @@ class SpatialConvolution[T: ClassTag](
                 gradOutput.size(3), gradOutput.size(2))
               col2imTime += System.nanoTime() - before
             }
-          case InputFormat.NHWC =>
+          case DataFormat.NHWC =>
             val channel = gradOutFloat.size(3)
             val oh = gradOutFloat.size(1)
             val ow = gradOutFloat.size(2)
@@ -649,7 +649,7 @@ class SpatialConvolution[T: ClassTag](
         val sBDouble = ev.toType[Double](scaleB)
         val gradBDouble = gradBias.asInstanceOf[Tensor[Double]]
         format match {
-          case InputFormat.NCHW =>
+          case DataFormat.NCHW =>
             val outChannel = gradOutput.size(1)
             val outSize = gradOutput.size(2) * gradOutput.size(3)
             val gradOutput2d = gradODouble.view(Array(outChannel, outSize))
@@ -672,7 +672,7 @@ class SpatialConvolution[T: ClassTag](
                 i += 1
               }
             }
-          case InputFormat.NHWC =>
+          case DataFormat.NHWC =>
             val outChannel = gradOutput.size(3)
             val outSize = gradOutput.size(1) * gradOutput.size(2)
             val gradOutput2d = gradODouble.view(Array(outSize, outChannel))
@@ -707,7 +707,7 @@ class SpatialConvolution[T: ClassTag](
         val sBFloat = ev.toType[Float](scaleB)
         val gradBFloat = gradBias.asInstanceOf[Tensor[Float]]
         format match {
-          case InputFormat.NCHW =>
+          case DataFormat.NCHW =>
             val outChannel = gradOutput.size(1)
             val outSize = gradOutput.size(2) * gradOutput.size(3)
             val gradOutput2d = gradOFloat.view(Array(outChannel, outSize))
@@ -730,7 +730,7 @@ class SpatialConvolution[T: ClassTag](
                 i += 1
               }
             }
-          case InputFormat.NHWC =>
+          case DataFormat.NHWC =>
             val outChannel = gradOutput.size(3)
             val outSize = gradOutput.size(1) * gradOutput.size(2)
             val gradOutput2d = gradOFloat.view(Array(outSize, outChannel))
@@ -776,7 +776,7 @@ class SpatialConvolution[T: ClassTag](
         val onesDouble = ones.asInstanceOf[Tensor[Double]]
 
         format match {
-          case InputFormat.NCHW =>
+          case DataFormat.NCHW =>
             val channel = gradODouble.size(1)
             val oh = gradODouble.size(2)
             val ow = gradODouble.size(3)
@@ -790,7 +790,7 @@ class SpatialConvolution[T: ClassTag](
               gradBDouble.addmv(0.0, sBDouble, gradOutput2d, onesDouble)
             }
 
-          case InputFormat.NHWC =>
+          case DataFormat.NHWC =>
             val channel = gradODouble.size(3)
             val oh = gradODouble.size(1)
             val ow = gradODouble.size(2)
@@ -815,7 +815,7 @@ class SpatialConvolution[T: ClassTag](
         val onesFloat = ones.asInstanceOf[Tensor[Float]]
 
         format match {
-          case InputFormat.NCHW =>
+          case DataFormat.NCHW =>
             val channel = gradOFloat.size(1)
             val oh = gradOFloat.size(2)
             val ow = gradOFloat.size(3)
@@ -829,7 +829,7 @@ class SpatialConvolution[T: ClassTag](
               gradBFloat.addmv(0.0f, sBFloat, gradOutput2d, onesFloat)
             }
 
-          case InputFormat.NHWC =>
+          case DataFormat.NHWC =>
             val channel = gradOFloat.size(3)
             val oh = gradOFloat.size(1)
             val ow = gradOFloat.size(2)
@@ -867,7 +867,7 @@ object SpatialConvolution {
       initBias: Tensor[T] = null,
       initGradWeight: Tensor[T] = null,
       initGradBias: Tensor[T] = null,
-      format: InputFormat = InputFormat.NCHW
+      format: DataFormat = DataFormat.NCHW
   )(implicit ev: TensorNumeric[T]): SpatialConvolution[T] = {
     new SpatialConvolution[T](nInputPlane, nOutputPlane, kernelW, kernelH,
       strideW, strideH, padW, padH, nGroup, propagateBack,

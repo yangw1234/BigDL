@@ -18,7 +18,7 @@ package com.intel.analytics.bigdl.nn
 
 import java.util
 
-import com.intel.analytics.bigdl.nn.abstractnn.{InputFormat, TensorModule}
+import com.intel.analytics.bigdl.nn.abstractnn.{DataFormat, TensorModule}
 import com.intel.analytics.bigdl.tensor.Tensor
 import com.intel.analytics.bigdl.tensor.TensorNumericMath.TensorNumeric
 
@@ -53,7 +53,7 @@ class SpatialAveragePooling[@specialized(Float, Double) T: ClassTag](
   private var ceilMode: Boolean = false,
   private var countIncludePad: Boolean = true,
   private var divide: Boolean = true,
-  val format: InputFormat = InputFormat.NCHW
+  val format: DataFormat = DataFormat.NCHW
 )(implicit ev: TensorNumeric[T]) extends TensorModule[T] {
 
   @transient
@@ -331,7 +331,7 @@ class SpatialAveragePooling[@specialized(Float, Double) T: ClassTag](
     }
     if (input.dim() == 3) {
       format match {
-        case InputFormat.NCHW =>
+        case DataFormat.NCHW =>
           output.resize(Array(nInputPlane, outputHeight, outputWidth))
           if (classTag[T] == classTag[Double]) {
             updateOutputFrameDouble(input.asInstanceOf[Tensor[Double]],
@@ -344,7 +344,7 @@ class SpatialAveragePooling[@specialized(Float, Double) T: ClassTag](
               nInputPlane, inputHeight, inputWidth, outputHeight, outputWidth,
               kW, kH, dW, dH)
           }
-        case InputFormat.NHWC =>
+        case DataFormat.NHWC =>
           output.resize(Array(outputHeight, outputWidth, nInputPlane))
           if (classTag[T] == classTag[Double]) {
             updateOutputFrameDoubleNHWC(input.asInstanceOf[Tensor[Double]],
@@ -367,7 +367,7 @@ class SpatialAveragePooling[@specialized(Float, Double) T: ClassTag](
       }
 
       format match {
-        case InputFormat.NCHW =>
+        case DataFormat.NCHW =>
           output.resize(Array(nbatch, nInputPlane, outputHeight, outputWidth))
 
           var i = 1
@@ -389,7 +389,7 @@ class SpatialAveragePooling[@specialized(Float, Double) T: ClassTag](
             i += 1
           }
           Engine.model.sync(results)
-        case InputFormat.NHWC =>
+        case DataFormat.NHWC =>
           output.resize(Array(nbatch, outputHeight, outputWidth, nInputPlane))
 
           var i = 1
@@ -645,7 +645,7 @@ class SpatialAveragePooling[@specialized(Float, Double) T: ClassTag](
     gradInput.resizeAs(input).zero()
     if (input.dim() == 3) {
       format match {
-        case InputFormat.NCHW =>
+        case DataFormat.NCHW =>
           if (classTag[T] == classTag[Double]) {
             updateGradInputFrameDouble(gradInput.asInstanceOf[Tensor[Double]],
               gradOutput.asInstanceOf[Tensor[Double]],
@@ -657,7 +657,7 @@ class SpatialAveragePooling[@specialized(Float, Double) T: ClassTag](
               nInputPlane, inputHeight, inputWidth, outputHeight, outputWidth,
               kW, kH, dW, dH)
           }
-        case InputFormat.NHWC =>
+        case DataFormat.NHWC =>
           if (classTag[T] == classTag[Double]) {
             updateGradInputFrameDoubleNHWC(gradInput.asInstanceOf[Tensor[Double]],
               gradOutput.asInstanceOf[Tensor[Double]],
@@ -678,7 +678,7 @@ class SpatialAveragePooling[@specialized(Float, Double) T: ClassTag](
       }
 
       format match {
-        case InputFormat.NCHW =>
+        case DataFormat.NCHW =>
           var i = 1
           while (i <= nBatch) {
             val _i = i
@@ -698,7 +698,7 @@ class SpatialAveragePooling[@specialized(Float, Double) T: ClassTag](
             i += 1
           }
           Engine.model.sync(results)
-        case InputFormat.NHWC =>
+        case DataFormat.NHWC =>
           var i = 1
           while (i <= nBatch) {
             val _i = i
@@ -779,7 +779,7 @@ object SpatialAveragePooling {
       ceilMode: Boolean = false,
       countIncludePad: Boolean = true,
       divide: Boolean = true,
-      format: InputFormat = InputFormat.NCHW)
+      format: DataFormat = DataFormat.NCHW)
       (implicit ev: TensorNumeric[T]) : SpatialAveragePooling[T] = {
     new SpatialAveragePooling[T](kW, kH, dW, dH, padW, padH,
       ceilMode, countIncludePad, divide, format)

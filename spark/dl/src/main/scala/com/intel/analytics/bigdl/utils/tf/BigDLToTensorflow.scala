@@ -18,7 +18,7 @@ package com.intel.analytics.bigdl.utils.tf
 import java.nio.ByteOrder
 
 import com.intel.analytics.bigdl.nn._
-import com.intel.analytics.bigdl.nn.abstractnn.{AbstractModule, InputFormat}
+import com.intel.analytics.bigdl.nn.abstractnn.{AbstractModule, DataFormat}
 import com.intel.analytics.bigdl.tensor.Tensor
 import com.intel.analytics.bigdl.utils.T
 import Tensorflow._
@@ -111,10 +111,10 @@ object SpatialConvolutionToTF extends BigDLToTensorflow {
     // GOIHW -> HWIO
     require(spatialConv.weight.size(1) == 1, "convolution group is not supported")
     val filterTensor = spatialConv.format match {
-      case InputFormat.NCHW =>
+      case DataFormat.NCHW =>
         spatialConv.weight.select(1, 1).transpose(2, 3).transpose(3, 4)
           .transpose(1, 2).transpose(2, 3).transpose(3, 4).contiguous()
-      case InputFormat.NHWC =>
+      case DataFormat.NHWC =>
         spatialConv.weight.select(1, 1)
     }
 

@@ -22,7 +22,7 @@ import collection.JavaConverters._
 import com.intel.analytics.bigdl.nn._
 import com.intel.analytics.bigdl.tensor.{Storage, Tensor}
 import org.tensorflow.framework.{DataType, NodeDef, TensorProto}
-import com.intel.analytics.bigdl.nn.abstractnn.{AbstractModule, Activity, InputFormat}
+import com.intel.analytics.bigdl.nn.abstractnn.{AbstractModule, Activity, DataFormat}
 import com.intel.analytics.bigdl.nn.tf._
 import com.intel.analytics.bigdl.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.bigdl.utils.{DirectedGraph, Node, T}
@@ -379,7 +379,7 @@ object Conv2D extends TensorflowToBigDL{
       initBias = bias,
       initGradWeight = gradWeights,
       initGradBias = gradBias,
-      format = InputFormat.getFormat(format)
+      format = DataFormat.getFormat(format)
     ).asInstanceOf[AbstractModule[Activity, Tensor[T], T]]
   }
 }
@@ -510,7 +510,7 @@ object MaxPoolingTF extends TensorflowToBigDL {
       }
 
     SpatialMaxPooling[T](ksizeW, ksizeH, strideW, strideH, pW, pH,
-      format = InputFormat.getFormat(format))
+      format = DataFormat.getFormat(format))
     .asInstanceOf[AbstractModule[Activity, Tensor[T], T]]
   }
 }
@@ -559,7 +559,7 @@ object AvgPoolingTF extends TensorflowToBigDL{
       }
 
     SpatialAveragePooling[T](ksizeW, ksizeH, strideW, strideH, pW, pH,
-      countIncludePad = false, format = InputFormat.getFormat(format))
+      countIncludePad = false, format = DataFormat.getFormat(format))
       .asInstanceOf[AbstractModule[Activity, Tensor[T], T]]
   }
 }

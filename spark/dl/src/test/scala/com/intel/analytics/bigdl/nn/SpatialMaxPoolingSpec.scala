@@ -18,7 +18,7 @@ package com.intel.analytics.bigdl.nn
 
 import com.intel.analytics.bigdl.utils.RandomGenerator
 import com.intel.analytics.bigdl._
-import com.intel.analytics.bigdl.nn.abstractnn.InputFormat
+import com.intel.analytics.bigdl.nn.abstractnn.DataFormat
 import org.scalatest.{FlatSpec, Matchers}
 import com.intel.analytics.bigdl.tensor.Tensor
 
@@ -74,7 +74,7 @@ class SpatialMaxPoolingSpec extends FlatSpec with Matchers {
 
     import tensor.TensorNumericMath.TensorNumeric.NumericFloat
     val module = new SpatialMaxPooling(2, 2, 2, 2)
-    val moduleNHWC = new SpatialMaxPooling(2, 2, 2, 2, format = InputFormat.NHWC)
+    val moduleNHWC = new SpatialMaxPooling(2, 2, 2, 2, format = DataFormat.NHWC)
     val input = Tensor(2, 4, 3, 3).randn()
     val gradOutput = Tensor(2, 4, 1, 1).randn()
 

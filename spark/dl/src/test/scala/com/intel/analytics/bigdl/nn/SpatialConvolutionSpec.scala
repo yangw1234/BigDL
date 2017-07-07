@@ -21,7 +21,7 @@ import org.scalatest.{FlatSpec, Matchers}
 
 import scala.math._
 import com.intel.analytics.bigdl._
-import com.intel.analytics.bigdl.nn.abstractnn.InputFormat
+import com.intel.analytics.bigdl.nn.abstractnn.DataFormat
 import com.intel.analytics.bigdl.optim.{L2Regularizer, SGD}
 import com.intel.analytics.bigdl.utils.RandomGenerator._
 
@@ -223,7 +223,7 @@ class SpatialConvolutionSpec extends FlatSpec with Matchers {
       val layer = new SpatialConvolution(param.nIn, param.nOut,
         param.kW, param.kH, param.dW, param.dH, param.pW, param.pH)
       val layerNHWC = new SpatialConvolution(param.nIn, param.nOut,
-        param.kW, param.kH, param.dW, param.dH, param.pW, param.pH, format = InputFormat.NHWC)
+        param.kW, param.kH, param.dW, param.dH, param.pW, param.pH, format = DataFormat.NHWC)
 
       val input = Tensor(Array(4, param.nIn, 7, 7)).randn()
 
