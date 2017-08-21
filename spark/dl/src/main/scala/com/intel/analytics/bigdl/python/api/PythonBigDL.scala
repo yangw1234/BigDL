@@ -382,7 +382,7 @@ class PythonBigDL[T: ClassTag](implicit ev: TensorNumeric[T]) extends Serializab
                                   format: String = "NCHW")
   : SpatialAveragePooling[T] = {
     SpatialAveragePooling[T](kW, kH, dW, dH, padW, padH, globalPooling,
-      ceilMode, countIncludePad, divide,format = DataFormat(format))
+      ceilMode, countIncludePad, divide, format = DataFormat(format))
   }
 
   def createSpatialBatchNormalization(nOutput: Int,
