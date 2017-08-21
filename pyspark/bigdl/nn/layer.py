@@ -813,6 +813,18 @@ class SpatialMaxPooling(Layer):
     oheight = op((height + 2*padH - kH) / dH + 1)
     op is a rounding operator. By default, it is floor.
     It can be changed by calling :ceil() or :floor() methods.
+    
+    When padW and padH are both -1, we use a padding algorithm similar to the "SAME"
+    padding of tensorflow. That is
+ 
+     outHeight = Math.ceil(inHeight.toFloat/strideH.toFloat)
+     outWidth = Math.ceil(inWidth.toFloat/strideW.toFloat)
+ 
+     padAlongHeight = Math.max(0, (outHeight - 1) * strideH + kernelH - inHeight)
+     padAlongWidth = Math.max(0, (outWidth - 1) * strideW + kernelW - inWidth)
+ 
+     padTop = padAlongHeight / 2
+     padLeft = padAlongWidth / 2
 
     :param kW:              kernel width
     :param kH:              kernel height
@@ -1075,7 +1087,18 @@ class SpatialAveragePooling(Layer):
     '''
     Applies 2D average-pooling operation in kWxkH regions by step size dWxdH steps.
     The number of output features is equal to the number of input planes.
-
+    
+    When padW and padH are both -1, we use a padding algorithm similar to the "SAME"
+    padding of tensorflow. That is
+ 
+     outHeight = Math.ceil(inHeight.toFloat/strideH.toFloat)
+     outWidth = Math.ceil(inWidth.toFloat/strideW.toFloat)
+ 
+     padAlongHeight = Math.max(0, (outHeight - 1) * strideH + kernelH - inHeight)
+     padAlongWidth = Math.max(0, (outWidth - 1) * strideW + kernelW - inWidth)
+ 
+     padTop = padAlongHeight / 2
+     padLeft = padAlongWidth / 2
 
     :param kW: kernel width
     :param kH: kernel height
@@ -1088,9 +1111,12 @@ class SpatialAveragePooling(Layer):
     :param ceilMode: whether the output size is to be ceiled or floored
     :param countIncludePad: whether to include padding when dividing thenumber of elements in pooling region
     :param divide: whether to do the averaging
+    :param format:          "NCHW" or "NHWC", indicating the input data format
 
 
     >>> spatialAveragePooling = SpatialAveragePooling(7,7)
+    creating: createSpatialAveragePooling
+    >>> spatialAveragePooling = SpatialAveragePooling(2, 2, 2, 2, -1, -1, True, "NHWC")
     creating: createSpatialAveragePooling
     '''
 
@@ -1105,6 +1131,7 @@ class SpatialAveragePooling(Layer):
                  ceil_mode=False,
                  count_include_pad=True,
                  divide=True,
+                 format="NCHW",
                  bigdl_type="float"):
         super(SpatialAveragePooling, self).__init__(None, bigdl_type,
                                                     kw,
@@ -1116,7 +1143,8 @@ class SpatialAveragePooling(Layer):
                                                     global_pooling,
                                                     ceil_mode,
                                                     count_include_pad,
-                                                    divide)
+                                                    divide,
+                                                    format)
 
 
 class SpatialBatchNormalization(Layer):
@@ -3624,6 +3652,18 @@ class SpatialConvolutionMap(Layer):
     This class is a generalization of SpatialConvolution.
     It uses a generic connection table between input and output features.
     The SpatialConvolution is equivalent to using a full connection table.
+    
+    When padW and padH are both -1, we use a padding algorithm similar to the "SAME"
+    padding of tensorflow. That is
+ 
+     outHeight = Math.ceil(inHeight.toFloat/strideH.toFloat)
+     outWidth = Math.ceil(inWidth.toFloat/strideW.toFloat)
+ 
+     padAlongHeight = Math.max(0, (outHeight - 1) * strideH + kernelH - inHeight)
+     padAlongWidth = Math.max(0, (outWidth - 1) * strideW + kernelW - inWidth)
+ 
+     padTop = padAlongHeight / 2
+     padLeft = padAlongWidth / 2
 
     :param wRegularizer: instance of [[Regularizer]](eg. L1 or L2 regularization), applied to the input weights matrices.
     :param bRegularizer: instance of [[Regularizer]]applied to the bias.
