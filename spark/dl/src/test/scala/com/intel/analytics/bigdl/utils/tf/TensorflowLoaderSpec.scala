@@ -17,11 +17,12 @@ package com.intel.analytics.bigdl.utils.tf
 
 import java.io.{File => JFile}
 import java.nio.ByteOrder
+import java.util
 import java.util.UUID
 
 import com.intel.analytics.bigdl.dataset.{DistributedDataSet, MiniBatch}
 import com.intel.analytics.bigdl.nn._
-import com.intel.analytics.bigdl.optim.{DistriOptimizer, Trigger}
+import com.intel.analytics.bigdl.optim.{DistriOptimizer, SGD, Trigger}
 import com.intel.analytics.bigdl.tensor.{Storage, Tensor}
 import com.intel.analytics.bigdl.utils._
 import org.apache.log4j.{Level, Logger}
@@ -179,6 +180,33 @@ class TensorflowLoaderSpec extends TensorflowSpecHelper{
 
     val output2 = model2.forward(input)
     output1 should be(output2)
+  }
+
+  "TensorFlow loader" should "be good" in {
+
+    import scala.collection.JavaConverters._
+
+    val path = "/home/yang/sources/bigdl/pyspark/graph/model.pb"
+
+    val nodes = TensorflowLoader.parse(path)
+
+    val session = new BigDLSessionImpl[Float](nodes.asScala,
+      new mutable.HashMap[String, (Tensor[Float], Tensor[Float])])
+
+    val data = new Array[Tensor[Float]](100)
+    val label = new Array[Tensor[Float]](100)
+    for (i <- Range(0, 100)) {
+      val t = Tensor[Float](Array(784))
+      val l = Tensor[Float](Array(1)).setValue(1, 2)
+      data.update(i, t)
+      label.update(i, l)
+    }
+
+    val optim = new SGD(0.001)
+    val criterion = CrossEntropyCriterion()
+    val endWhen = Trigger.maxEpoch(5)
+
+    session.train(Seq("BiasAdd"), data, label, optim, criterion, 16, endWhen)
   }
 
   "TensorFlow loader" should "be able to build a BigDL graph from a subset of a tf graph" in {

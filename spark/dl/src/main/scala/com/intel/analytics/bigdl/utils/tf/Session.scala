@@ -19,9 +19,9 @@ import java.nio.{ByteOrder, DoubleBuffer, FloatBuffer}
 
 import com.intel.analytics.bigdl.Criterion
 import com.intel.analytics.bigdl.dataset.{DataSet, Sample}
-import com.intel.analytics.bigdl.nn.{ClassNLLCriterion, Graph}
-import com.intel.analytics.bigdl.nn.abstractnn.Activity
-import com.intel.analytics.bigdl.optim.{Optimizer, Trigger}
+import com.intel.analytics.bigdl.nn.{ClassNLLCriterion, Graph, Linear}
+import com.intel.analytics.bigdl.nn.abstractnn.{AbstractModule, Activity}
+import com.intel.analytics.bigdl.optim.{OptimMethod, Optimizer, SGD, Trigger}
 import com.intel.analytics.bigdl.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.bigdl.tensor.{Storage, Tensor}
 import com.intel.analytics.bigdl.utils._
@@ -41,12 +41,20 @@ abstract class Session[T: ClassTag] {
 
   def run(endPoints: Array[String],
           batchSize: Int): RDD[Array[Tensor[T]]]
-  def train(output: String,
-                     data: Array[Tensor[T]],
-                     label: Array[Tensor[T]],
-                     optimizer: String,
-                     loss: String,
-                     batchSize: Int, endWhen: Trigger): Graph[T]
+
+  def train(outputs: Seq[String],
+            data: Seq[Tensor[T]],
+            label: Seq[Tensor[T]],
+            optMethod: OptimMethod[T],
+            criterion: Criterion[T],
+            batchSize: Int,
+            endWhen: Trigger): Graph[T]
+
+  def train(modelOutputs: Seq[String],
+            labels: Seq[String],
+            optMethod: OptimMethod[T],
+            criterion: Criterion[T],
+            endWhen: Trigger): Graph[T]
 
 
   // def setGraph(graphDef: GraphDef): Unit
@@ -54,16 +62,17 @@ abstract class Session[T: ClassTag] {
 
 class BigDLSessionImpl[T: ClassTag](
        graph: Seq[NodeDef],
-       context: mutable.HashMap[String, (Tensor[T], Tensor[T])],
-       sc: SparkContext, totalCores: Int)
+       context: mutable.HashMap[String, (Tensor[T], Tensor[T])])
                          (implicit ev: TensorNumeric[T]) extends Session[T] {
   import scala.collection.JavaConverters._
+
+  val sc = SparkContext.getOrCreate()
+  Engine.init
+
 
   private val noInputOp = Set("Const", "VariableV2", "NoOp")
 
   private val inputOp = Set("ReaderReadV2", "QueueDequeueV2", "QueueDequeueManyV2", "Placeholder")
-
-  private val supportedInputOp = Set("FIFOQueueV2", "RandomShuffleQueueV2")
 
   private val enqueueOp = Set("QueueEnqueueV2")
 
@@ -72,7 +81,7 @@ class BigDLSessionImpl[T: ClassTag](
   private val (wholeTFGraph, _) = TensorflowLoader.buildTFGraph(graph.asJava, null)
 
   private val name2Node = wholeTFGraph.
-    DFS.filter(_.element == null).map(node => (node.element.getName, node)).toMap
+    DFS.filter(_.element != null).map(node => (node.element.getName, node)).toMap
 
   private def tableToSeq(table: Table): Seq[Tensor[T]] = {
     for (i <- 0 until table.length()) yield {
@@ -108,19 +117,19 @@ class BigDLSessionImpl[T: ClassTag](
   }
 
   private def readTFRecord(filesTensor: Seq[Table]): RDD[Table] = {
-
-    val result = filesTensor.map { t =>
-        require(t.length() == 1 && t(1).isInstanceOf[Tensor[String]],
-          "Reader can only read one file at a time")
-        val file = t(1).asInstanceOf[Tensor[String]].apply(Array(1))
-        file
-    }.flatMap{ file =>
-      val iter = new TFRecordIterator(new java.io.File(file))
-      iter
-    }.map { record =>
-      T(Tensor[String](Array(record), Array(1)))
-    }
-    sc.parallelize(result, numSlices = totalCores)
+    throw new Exception()
+//    val result = filesTensor.map { t =>
+//        require(t.length() == 1 && t(1).isInstanceOf[Tensor[String]],
+//          "Reader can only read one file at a time")
+//        val file = t(1).asInstanceOf[Tensor[String]].apply(Array(1))
+//        file
+//    }.flatMap{ file =>
+//      val iter = new TFRecordIterator(new java.io.File(file))
+//      iter
+//    }.map { record =>
+//      T(Tensor[String](Array(record), Array(1)))
+//    }
+//    sc.parallelize(result, numSlices = 4)
   }
 
   private def handleLocalDequeue(node: Node[NodeDef]): Seq[Table] = {
@@ -291,16 +300,15 @@ class BigDLSessionImpl[T: ClassTag](
     }
   }
 
-  private def constructModel(endPoints: Seq[String]): Graph[T] = {
+  private def constructModel(endPoints: Seq[String]): (Graph[T], Node[NodeDef]) = {
     val isInputOp = (n: NodeDef) => inputOp(n.getOp)
     val (tfGraph, inputs) = TensorflowLoader.buildTFGraph(graph.asJava, endPoints, isInputOp)
 
     val inputNodes = inputs.map(name2Node)
 
-    require(inputNodes.length == 1 && supportedInputOp(inputNodes.head.element.getOp),
-           "Only support one queue as model input")
+    require(inputNodes.length == 1, "Only support one model input")
 
-    TensorflowLoader.buildBigDLModel(
+    val model = TensorflowLoader.buildBigDLModel(
       tfGraph,
       inputNodes.map(_.element.getName),
       endPoints,
@@ -308,6 +316,7 @@ class BigDLSessionImpl[T: ClassTag](
       "",
       Some(context)
     ).asInstanceOf[Graph[T]]
+    (model, inputNodes.head)
   }
 
   override def train(trainOp: String, optimizer: String,
@@ -315,33 +324,49 @@ class BigDLSessionImpl[T: ClassTag](
     throw new NotImplementedError()
   }
 
-  override def train(output: String,
-                     data: Array[Tensor[T]],
-                     label: Array[Tensor[T]],
-                     optimizer: String,
-                     loss: String,
+  override def train(outputs: Seq[String],
+                     data: Seq[Tensor[T]],
+                     label: Seq[Tensor[T]],
+                     optMethod: OptimMethod[T],
+                     criterion: Criterion[T],
                      batchSize: Int, endWhen: Trigger): Graph[T] = {
-    val conf = Engine.createSparkConf()
-      .setAppName("Text classification")
-    val sc = new SparkContext(conf)
-    Engine.init
 
-    val sampels = data.zip(label)
-
-    val rdd = sc.parallelize(sampels, Engine.coreNumber()).map{ case (f, l) =>
-      Sample(f, l)
+    val samples = data.zip(label).map { elem =>
+      Sample(elem._1, elem._2)
     }
 
-    val model = constructModel(Seq(output))
+    val coreNum = Engine.coreNumber()
+    val rdd = sc.parallelize(samples, coreNum)
+
+    val (model, input) = constructModel(outputs)
+
+    require(input.element.getOp == "Placeholder",
+      "only support Placeholder as input when in-memory input data is provided")
 
     val opt = Optimizer(
       model,
       rdd,
-      new ClassNLLCriterion[T](),
+      criterion,
       batchSize
     )
-    opt.
+    val optMethod = new SGD[T]()
+    opt.setOptimMethod(optMethod).setEndWhen(endWhen)
+      .optimize()
     model
+  }
+
+  override def train(modelOutputs: Seq[String],
+                     labels: Seq[String],
+                     optMethod: OptimMethod[T],
+                     criterion: Criterion[T],
+                     endWhen: Trigger): Graph[T] = {
+    val (model, modelInput) = constructModel(modelOutputs)
+
+    val (transformerForLabel, labelInput) = constructModel(labels)
+
+    require(modelInput == labelInput, "data and label should come from the same queue")
+
+    val data = constructDistributeData(Seq(input.element.getName) ++ labels)
   }
 
   override def run(endPoints: Array[String], batchSize: Int): RDD[Array[Tensor[T]]] = {
