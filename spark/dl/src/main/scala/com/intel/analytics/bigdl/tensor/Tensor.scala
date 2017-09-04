@@ -182,6 +182,8 @@ trait Tensor[T] extends Serializable with TensorMath[T] with Activity {
    */
   def apply(indexes: Array[Int]): T
 
+  def valueAt(): T
+
   /**
    * Query the value on a given position. The number of parameters
    * should be equal to the dimension number of the tensor.

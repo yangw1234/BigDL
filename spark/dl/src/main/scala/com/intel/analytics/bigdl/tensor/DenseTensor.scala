@@ -539,6 +539,12 @@ private[tensor] class DenseTensor[@specialized(Float, Double) T: ClassTag](
     this._storage(offset)
   }
 
+  override def valueAt(): T = {
+    require(this.isScalar, s"should call valueAt() on a scalar")
+    val offset = this._storageOffset
+    this._storage(offset)
+  }
+
   override def valueAt(d1: Int): T = {
     require(1 == this.nDimension, s"invalid size: 1 == ${this.nDimension}")
     var offset = this._storageOffset
