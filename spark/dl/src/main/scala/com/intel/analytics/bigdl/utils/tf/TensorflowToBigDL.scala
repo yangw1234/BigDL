@@ -21,9 +21,10 @@ import java.util
 
 import collection.JavaConverters._
 import com.intel.analytics.bigdl.nn._
-import com.intel.analytics.bigdl.tensor.{Storage, Tensor}
+import com.intel.analytics.bigdl.tensor.{FloatType, Storage, Tensor}
 import org.tensorflow.framework.{AttrValue, DataType, NodeDef, TensorProto}
 import com.intel.analytics.bigdl.nn.abstractnn.{AbstractModule, Activity, DataFormat}
+import com.intel.analytics.bigdl.nn.ops.{Assert, Greater}
 import com.intel.analytics.bigdl.nn.tf._
 import com.intel.analytics.bigdl.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.bigdl.utils.{DirectedGraph, Node, T}
@@ -121,6 +122,74 @@ object TensorflowToBigDL {
     sortPattern()
   }
 
+  private[utils] def parseTensor(tfTensor: TensorProto, endian: ByteOrder): Tensor[_] = {
+    val shape = tfTensor.getTensorShape.getDimList.asScala.map(_.getSize.toInt).toArray
+    if (shape.product == 1) {
+      tfTensor.getDtype match {
+        case DataType.DT_FLOAT =>
+          return Tensor[Float](T(tfTensor.getFloatVal(0)))
+        case DataType.DT_DOUBLE =>
+          return Tensor[Double](T(tfTensor.getDoubleVal(0)))
+        case DataType.DT_INT32 =>
+          return Tensor[Int](T(tfTensor.getIntVal(0)))
+        case DataType.DT_BOOL =>
+          return Tensor[Boolean](T(tfTensor.getBoolVal(0)))
+        case DataType.DT_STRING =>
+          return Tensor[String](T(tfTensor.getStringVal(0)))
+      }
+    }
+
+    val buffer = ByteBuffer.wrap(tfTensor.getTensorContent.toByteArray)
+    buffer.order(endian)
+    tfTensor.getDtype match {
+      case DataType.DT_FLOAT =>
+        val params = buffer.asFloatBuffer
+        val tmp = new Array[Float](params.capacity())
+        var j = 0
+        while (j < params.capacity()) {
+          tmp(j) = params.get(j)
+          j += 1
+        }
+        Tensor(Storage(tmp), 1, shape)
+      case DataType.DT_DOUBLE =>
+        val params = buffer.asDoubleBuffer()
+        val tmp = new Array[Double](params.capacity())
+        var j = 0
+        while (j < params.capacity()) {
+          tmp(j) = params.get(j)
+          j += 1
+        }
+        Tensor(Storage(tmp), 1, shape)
+      case DataType.DT_INT32 =>
+        val params = buffer.asIntBuffer()
+        val tmp = new Array[Int](params.capacity())
+        var j = 0
+        while (j < params.capacity()) {
+          tmp(j) = params.get(j)
+          j += 1
+        }
+        Tensor(Storage(tmp), 1, shape)
+//      case DataType.DT_BOOL =>
+//        val params = buffer.
+//        val tmp = new Array[Int](params.capacity())
+//        var j = 0
+//        while (j < params.capacity()) {
+//          tmp(j) = params.get(j)
+//          j += 1
+//        }
+//        Tensor(Storage(tmp), 1, shape)
+//      case DataType.DT_STRING =>
+//        val params = buffer
+//        val tmp = new Array[String](params.capacity())
+//        var j = 0
+//        while (j < params.capacity()) {
+//          tmp(j) = params.get(j)
+//          j += 1
+//        }
+//        Tensor(Storage(tmp), 1, shape)
+    }
+  }
+
   /**
    * Convert a tensorflow tensor proto to BigDL tensor
    * @param tfTensor
@@ -129,11 +198,11 @@ object TensorflowToBigDL {
   private[utils] def toTensor[T: ClassTag](tfTensor: TensorProto, endian: ByteOrder)(
     implicit ev: TensorNumeric[T]): Tensor[T] = {
 
-    require(
-      tfTensor.getDtype == DataType.DT_FLOAT ||
-        tfTensor.getDtype == DataType.DT_DOUBLE ||
-        tfTensor.getDtype == DataType.DT_INT32,
-      s"Data type ${tfTensor.getDtype} is not supported now")
+//    require(
+//      tfTensor.getDtype == DataType.DT_FLOAT ||
+//        tfTensor.getDtype == DataType.DT_DOUBLE ||
+//        tfTensor.getDtype == DataType.DT_INT32,
+//      s"Data type ${tfTensor.getDtype} is not supported now")
 
     val shape = tfTensor.getTensorShape.getDimList.asScala.map(_.getSize.toInt).toArray
 
@@ -236,7 +305,7 @@ object TensorflowToBigDL {
       BatchNormTF, AddConstTF1, AddConstTF2, AddTF, SoftMaxTF, ElementWiseMulTF, MulTF,
       SplitTF, PaddingTF, MeanTF, UnpackTF, StrideSliceTF, ShapeTF, FillTF, PackTF, ConstTF,
       Flatten, Conv2D2, Conv1D, FlattenV2, BatchNormV2NHWCTF, BatchNormV2NCHWTF, AddNTF,
-      ControlDependencyTF
+      ControlDependencyTF, RandomShuffleTF, AssertTF, GreaterTF
     )
     res
   }
@@ -773,8 +842,11 @@ object ConstTF extends TensorflowToBigDL {
     implicit ev: TensorNumeric[T]): AbstractModule[Activity, Tensor[T], T] = {
 
     val value = TensorflowToBigDL
-      .toTensor(tfGraph.source.element.getAttrMap.get("value").getTensor, byteOrder)
-    Const(value).asInstanceOf[AbstractModule[Activity, Tensor[T], T]]
+      .parseTensor(tfGraph.source.element.getAttrMap.get("value").getTensor, byteOrder)
+    value match {
+      case t:Tensor[String] => Const[String](t)
+    }
+    // Const(value).asInstanceOf[AbstractModule[Activity, Tensor[T], T]]
   }
 }
 
@@ -1495,6 +1567,65 @@ object ControlDependencyTF extends TensorflowToBigDL {
      implicit ev: TensorNumeric[T]): AbstractModule[Activity, Tensor[T], T] = {
 
     ControlDependency().asInstanceOf[AbstractModule[Activity, Tensor[T], T]]
+  }
+
+}
+
+object AssertTF extends TensorflowToBigDL {
+
+  private val graph = {
+    val node = Node("Assert")
+    Node("*") -> node
+    (Node("*") -> node).graph(reverse = true)
+  }
+
+  override def topology: DirectedGraph[String] = graph
+
+  override def layer[T: ClassTag](tfGraph: DirectedGraph[NodeDef],
+                                  context: Context[T],
+                                  byteOrder: ByteOrder)(
+    implicit ev: TensorNumeric[T]): AbstractModule[Activity, Tensor[T], T] = {
+
+    new Assert().asInstanceOf[AbstractModule[Activity, Tensor[T], T]]
+  }
+
+}
+
+object GreaterTF extends TensorflowToBigDL {
+
+  private val graph = {
+    val node = Node("Greater")
+    Node("*") -> node
+    (Node("*") -> node).graph(reverse = true)
+  }
+
+  override def topology: DirectedGraph[String] = graph
+
+  override def layer[T: ClassTag](tfGraph: DirectedGraph[NodeDef],
+                                  context: Context[T],
+                                  byteOrder: ByteOrder)(
+    implicit ev: TensorNumeric[T]): AbstractModule[Activity, Tensor[T], T] = {
+
+    new Greater().asInstanceOf[AbstractModule[Activity, Tensor[T], T]]
+  }
+
+}
+
+object RandomShuffleTF extends TensorflowToBigDL {
+
+  private val graph = {
+    val node = Node("RandomShuffle")
+    (Node("*") -> node).graph(reverse = true)
+  }
+
+  override def topology: DirectedGraph[String] = graph
+
+  override def layer[T: ClassTag](tfGraph: DirectedGraph[NodeDef],
+                                  context: Context[T],
+                                  byteOrder: ByteOrder)(
+    implicit ev: TensorNumeric[T]): AbstractModule[Activity, Tensor[T], T] = {
+
+    new Input().asInstanceOf[AbstractModule[Activity, Tensor[T], T]]
   }
 
 }
