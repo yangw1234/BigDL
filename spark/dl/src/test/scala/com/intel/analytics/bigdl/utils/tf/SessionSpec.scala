@@ -19,7 +19,7 @@ import com.intel.analytics.bigdl.dataset.{DistributedDataSet, MiniBatch}
 import com.intel.analytics.bigdl.nn.CrossEntropyCriterion
 import com.intel.analytics.bigdl.optim.{SGD, Trigger}
 import com.intel.analytics.bigdl.tensor.Tensor
-import com.intel.analytics.bigdl.utils.Engine
+import com.intel.analytics.bigdl.utils.{Engine, Table}
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
@@ -88,9 +88,12 @@ class SessionSpec extends FlatSpec with Matchers with BeforeAndAfter {
     val session = new BigDLSessionImpl[Float](nodes.asScala,
       new mutable.HashMap[String, (Tensor[Float], Tensor[Float])])
 
-    val result = session.constructLocalData(Seq("parallel_read/filenames/RandomShuffle"))
 
-    println(result)
+    val cache = mutable.HashMap[String, Array[Seq[Table]]]()
+    val result = session.constructDistributeData(
+      Seq("ParseSingleExample/SerializedDependencies"), cache)
+    val first = result.first()
+    println(first)
   }
 
 }

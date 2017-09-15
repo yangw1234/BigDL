@@ -820,4 +820,11 @@ class DenseTensorSpec extends FlatSpec with Matchers {
     t.update(Array[Int](), 2.0)
     t should be (DenseTensor[Double](2.0))
   }
+
+  "Select on a Vector " should "be a scalar" in {
+    val t: Tensor[Double] = new DenseTensor[Double](2)
+    val result = t.select(1, 1)
+    result.isScalar should be (true)
+    result.size()
+  }
 }

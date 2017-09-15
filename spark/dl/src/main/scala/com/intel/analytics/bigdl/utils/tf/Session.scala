@@ -28,6 +28,8 @@ import com.intel.analytics.bigdl.utils._
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.tensorflow.framework.{GraphDef, NodeDef}
+import com.google.protobuf.ByteString
+import com.intel.analytics.bigdl.models.utils.ModelBroadcast
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
@@ -72,11 +74,13 @@ class BigDLSessionImpl[T: ClassTag](
 
   private val inputOp = Set("ReaderReadV2", "QueueDequeueV2", "QueueDequeueManyV2", "Placeholder")
 
-  private val enqueueOp = Set("QueueEnqueueV2")
+  private val dequeueOp = Set("QueueDequeueV2", "QueueDequeueManyV2", "ReaderReadV2")
+
+  private val enqueueOp = Set("QueueEnqueueV2", "QueueEnqueueManyV2")
 
   private val readerOps = Set("TFRecordReaderV2")
 
-  private val (wholeTFGraph, _) = TensorflowLoader.buildTFGraph(graph.asJava, null)
+  private val (wholeTFGraph, _, _) = TensorflowLoader.buildTFGraph(graph.asJava, null)
 
   private val name2Node = wholeTFGraph.
     DFS.filter(_.element != null).map(node => (node.element.getName, node)).toMap
@@ -95,78 +99,172 @@ class BigDLSessionImpl[T: ClassTag](
     table
   }
 
-  private def handleReaderNode(node: Node[NodeDef]): RDD[Table] = {
+  private def handleReaderNode(node: Node[NodeDef], cache: DataCache): RDD[Table] = {
     require(node.prevNodes.length == 2, "require ReaderReadV2 only has two inputs")
     val readerNode = node.prevNodes.head
     val queueNode = node.prevNodes(1)
-    val enqueueNodes = queueNode.nextNodes.filter(n => enqueueOp(n.element.getOp))
-    val filesSeq = enqueueNodes.map { enqueueNode =>
-      val inputs = enqueueNode.prevNodes.filter(_ != queueNode).map(_.element.getName)
-      constructLocalData(inputs)
-    }.reduce { (outerSeq1, outerSeq2) =>
-      outerSeq1.zip(outerSeq2).map { case (seq1, seq2) =>
-        seq1.add(seq2)
+    val dequeNodeNames = mutable.LinkedHashSet[String]()
+
+    queueNode.nextNodes
+      .filter(n => n.element != null && dequeueOp(n.element.getOp))
+      .map(n => n.element.getName.split(":")(0)).foreach(dequeNodeNames.add)
+
+    val nameToIndex = dequeNodeNames.zipWithIndex.toMap
+    val index = nameToIndex(node.element.getName)
+    val nSlices = dequeNodeNames.size
+
+    val enqueueNodes = queueNode.nextNodes
+      .filter(n => n.element != null && enqueueOp(n.element.getOp))
+    val filesSeq = if (cache.contains(queueNode.element.getName)) {
+      val resultArray = cache(queueNode.element.getName)
+      val result = resultArray(index)
+      resultArray(index) = null
+      result
+    } else {
+      val allResult = enqueueNodes.map { enqueueNode =>
+        val inputs = Seq(enqueueNode.element.getName)
+        val result = constructLocalData(inputs, new DataCache())
+        if (enqueueNode.element.getOp == "QueueEnqueueManyV2") {
+          result.flatMap { table =>
+            val nElem = table.length()
+            require(nElem >= 1, "EnqueueManyV2 encounter a empty table")
+            val first = table[Tensor[ByteString]](1)
+            require(first.nDimension() >= 1)
+            val depth = first.size(1)
+            val result = new Array[Table](depth)
+            var i = 0
+            while(i < depth) {
+              var j = 0
+              val newTable = new Table()
+              while (j < nElem) {
+                val elem = table[Tensor[ByteString]](j + 1)
+                newTable.insert(elem(i + 1))
+                j = j + 1
+              }
+              result(i) = newTable
+              i = i + 1
+            }
+            result
+          }
+        } else {
+          result
+        }
+      }.reduce { (outerSeq1, outerSeq2) =>
+        outerSeq1.zip(outerSeq2).map { case (seq1, seq2) =>
+          seq1.add(seq2)
+        }
       }
+      val resultArray = split(allResult, nSlices)
+      cache.put(queueNode.element.getName, resultArray)
+      resultArray(index)
     }
+
     readerNode.element.getOp match {
       case "TFRecordReaderV2" => readTFRecord(filesSeq)
     }
-
   }
 
-  private def readTFRecord(filesTensor: Seq[Table]): RDD[Table] = {
-    val result = filesTensor.map { t =>
-        require(t.length() == 1 && t(1).isInstanceOf[Tensor[String]],
+  private def split[A](xs: Seq[A], n: Int): Array[Seq[A]] = {
+    val result = new Array[Seq[A]](n)
+    var i = 0
+    while (i < n) {
+      result(i) = Vector[A]()
+      i = i + 1
+    }
+
+    var j = 0
+    while (j < xs.length) {
+      result(j % n) = result(j % n) :+ xs(j)
+      j = j + 1
+    }
+
+    result
+  }
+
+  private def readTFRecord(filesTable: Seq[Table]): RDD[Table] = {
+    val result = filesTable.map { t =>
+        require(t.length() == 1 && t(1).isInstanceOf[Tensor[ByteString]],
           "Reader can only read one file at a time")
-        val file = t(1).asInstanceOf[Tensor[String]].apply(Array(1))
+        val fileTensor = t[Tensor[ByteString]](1)
+        require(fileTensor.isScalar)
+        val file = fileTensor.valueAt()
         file
-    }.flatMap{ file =>
-      val iter = new TFRecordIterator(new java.io.File(file))
+    }.flatMap { file =>
+      val iter = new TFRecordIterator(new java.io.File(file.toStringUtf8))
       iter
     }.map { record =>
-      T(Tensor[String](Array(record), Array(1)))
+      val table = T()
+      val key = Tensor[ByteString](Array(ByteString.copyFromUtf8("somekey")), Array[Int]())
+      val value = Tensor[ByteString](Array(ByteString.copyFrom(record)), Array[Int]())
+      table.insert(key)
+      table.insert(value)
+      table
     }
-    sc.parallelize(result, numSlices = 4)
+    val resultRdd = sc.parallelize(result, numSlices = Engine.coreNumber())
+    resultRdd
   }
 
-  private def handleLocalDequeue(node: Node[NodeDef]): Seq[Table] = {
+  private def handleLocalDequeue(node: Node[NodeDef], cache: DataCache): Seq[Table] = {
     require(node.prevNodes.length == 1, "require QueueDequeueV2 only has one input")
     val queueNode = node.prevNodes.head
     val enqueueNodes = queueNode.nextNodes.filter(n => enqueueOp(n.element.getOp))
-    val dataSeq = enqueueNodes.map { enqueueNode =>
-      val inputs = enqueueNode.prevNodes.filter(_ != queueNode).map(_.element.getName)
-      constructLocalData(inputs)
-    }.reduce { (outerSeq1, outerSeq2) =>
-      outerSeq1.zip(outerSeq2).map { case (seq1, seq2) =>
-        seq1.add(seq2)
+    val dequeNodeNames = mutable.LinkedHashSet[String]()
+
+    queueNode.nextNodes
+      .filter(n => n.element != null && dequeueOp(n.element.getOp))
+      .map(n => n.element.getName.split(":")(0)).foreach(dequeNodeNames.add)
+
+    val nameToIndex = dequeNodeNames.zipWithIndex.toMap
+    val index = nameToIndex(node.element.getName)
+    val nSlices = dequeNodeNames.size
+
+    val dataSeq = if (cache.contains(queueNode.element.getName)) {
+      val resultArray = cache(queueNode.element.getName)
+      val result = resultArray(index)
+      resultArray(index) = null
+      result
+    } else {
+      val allResult = enqueueNodes.map { enqueueNode =>
+        val inputs = Seq(enqueueNode.element.getName)
+        constructLocalData(inputs, new DataCache())
+      }.reduce { (outerSeq1, outerSeq2) =>
+        outerSeq1.zip(outerSeq2).map { case (seq1, seq2) =>
+          seq1.add(seq2)
+        }
       }
+      val resultArray = split(allResult, nSlices)
+      cache.put(queueNode.element.getName, resultArray)
+      resultArray(index)
     }
     dataSeq
   }
 
-  private def handleDistriDequeue(node: Node[NodeDef]): RDD[Table] = {
+  private def handleDistriDequeue(node: Node[NodeDef], cache: DataCache): RDD[Table] = {
     require(node.prevNodes.length == 1, "require QueueDequeueV2 only has one input")
     val queueNode = node.prevNodes.head
-    val enqueueNodes = queueNode.nextNodes.filter(n => enqueueOp(n.element.getOp))
+    val dequeueNodes = queueNode.nextNodes
+      .filter(n => n.element != null && dequeueOp(n.element.getOp))
+      .map(n => n.element.getName.split(":")(0)).toSet
+    require(dequeueNodes.size == 1, "only support one dequeue node after reader")
+    val enqueueNodes = queueNode.nextNodes
+      .filter(n => n.element != null && enqueueOp(n.element.getOp))
     val rdd = enqueueNodes.map { enqueueNode =>
-      val inputs = enqueueNode.prevNodes.filter(_ != queueNode).map(_.element.getName)
-      constructDistributeData(inputs)
+      val inputs = Seq(enqueueNode.element.getName)
+      constructDistributeData(inputs, cache)
     }.reduce { (rdd1, rdd2) =>
-      rdd1.zip(rdd2).map { case (seq1, seq2) =>
-        seq1.add(seq2)
-      }
+      rdd1.union(rdd2)
     }
     rdd
   }
 
-  private def handleDistriDequeueManyNode(node: Node[NodeDef]): RDD[Table] = {
+  private def handleDistriDequeueManyNode(node: Node[NodeDef], cache: DataCache): RDD[Table] = {
     require(node.prevNodes.length == 2, "require QueueDequeueManyV2 only has two input")
     val queueNode = node.prevNodes.head
     val enqueueNodes = queueNode.nextNodes.filter(n => enqueueOp(n.element.getOp))
     // get previous rdd
     val rdd = enqueueNodes.map { enqueueNode =>
-      val inputs = enqueueNode.prevNodes.filter(_ != queueNode).map(_.element.getName)
-      constructDistributeData(inputs)
+      val inputs = Seq(enqueueNode.element.getName)
+      constructDistributeData(inputs, cache)
     }.reduce { (rdd1, rdd2) =>
       rdd1.zip(rdd2).map { case (seq1, seq2) =>
         seq1.add(seq2)
@@ -229,10 +327,23 @@ class BigDLSessionImpl[T: ClassTag](
     seqToTable(results)
   }
 
-  def constructLocalData(endPoints: Seq[String]): Seq[Table] = {
-    val isInputOp = (n: NodeDef) => inputOp(n.getOp)
-    val (tfGraph, inputs) = TensorflowLoader.buildTFGraph(graph.asJava, endPoints, isInputOp)
+  type DataCache = mutable.HashMap[String, Array[Seq[Table]]]
 
+  private def adjustInputNames(inputs: Seq[String]): Seq[String] = {
+    val stripedNames = inputs.map(_.split(":")(0))
+    val set = mutable.LinkedHashSet[String]()
+    for (name <- stripedNames) {
+      set.add(name)
+    }
+    set.toSeq
+  }
+
+  def constructLocalData(endPoints: Seq[String], cache: DataCache): Seq[Table] = {
+    val isInputOp = (n: NodeDef) => inputOp(n.getOp)
+    val (tfGraph, inputs, originInputs) = TensorflowLoader.
+      buildTFGraph(graph.asJava, endPoints, isInputOp)
+
+    val adjustedInputs = adjustInputNames(originInputs)
     val transformer = TensorflowLoader.buildBigDLModel(
       tfGraph,
       inputs,
@@ -243,12 +354,12 @@ class BigDLSessionImpl[T: ClassTag](
     ).asInstanceOf[Graph[T]]
 
 
-    if (inputs.nonEmpty) {
-      val inputNodes = inputs.map(name2Node)
+    if (adjustedInputs.nonEmpty) {
+      val inputNodes = originInputs.map(name2Node)
       val inputDataSeq = inputNodes.map { node => // this is the input op
         node.element.getOp match {
           // only support Dequeue before reader
-          case "QueueDequeueV2" => handleLocalDequeue(node)
+          case "QueueDequeueV2" => handleLocalDequeue(node, cache)
         }
       }
 
@@ -259,27 +370,45 @@ class BigDLSessionImpl[T: ClassTag](
       }
 
       reducedInputSeq.map { tensors =>
-        val output = transformer.forward(tensors)
-        output.asInstanceOf[Table]
+        val output = transformer.forward(tensors.flatten())
+        toTable(output)
       }
     } else {
-      Seq(transformer.forward(T()).toTable)
+      Seq(toTable(transformer.forward(T())))
     }
   }
 
-  private def constructDistributeData(endPoints: Seq[String]): RDD[Table] = {
-    val isInputOp = (n: NodeDef) => inputOp(n.getOp)
-    val (tfGraph, inputs) = TensorflowLoader.buildTFGraph(graph.asJava, endPoints, isInputOp)
+  private def toTable(activity: Activity): Table = {
+    activity match {
+      case t: Tensor[_] => T(t)
+      case t: Table => t
+    }
+  }
 
-    val inputNodes = inputs.map(name2Node)
+  def constructDistributeData(endPoints: Seq[String], cache: DataCache): RDD[Table] = {
+    val isInputOp = (n: NodeDef) => inputOp(n.getOp)
+    val (tfGraph, inputs, originInputs) =
+      TensorflowLoader.buildTFGraph(graph.asJava, endPoints, isInputOp)
+
+    val adjustedInputs = adjustInputNames(originInputs)
+
+    val inputNodes = adjustedInputs.map(name2Node)
+
+    val transformer = TensorflowLoader.buildBigDLModel(
+      tfGraph,
+      inputs,
+      endPoints,
+      ByteOrder.LITTLE_ENDIAN,
+      "",
+      Some(context)
+    ).asInstanceOf[Graph[T]]
 
     val inputRdds = inputNodes.map { node => // this is the input op
       node.element.getOp match {
-        case "ReaderReadV2" => handleReaderNode(node)
-        case "QueueDequeueV2" => handleDistriDequeue(node)
-        case "QueueDequeueManyV2" => handleDistriDequeueManyNode(node)
+        case "ReaderReadV2" => handleReaderNode(node, cache)
+        case "QueueDequeueV2" => handleDistriDequeue(node, cache)
+        case "QueueDequeueManyV2" => handleDistriDequeueManyNode(node, cache)
       }
-
     }
     val inputRdd = inputRdds.reduce { (rdd1, rdd2) =>
       rdd1.zip(rdd2).map { case (seq1, seq2) =>
@@ -287,24 +416,22 @@ class BigDLSessionImpl[T: ClassTag](
       }
     }
 
-    val transformer = TensorflowLoader.buildBigDLModel(
-      tfGraph,
-      inputNodes.map(_.element.getName),
-      endPoints,
-      ByteOrder.LITTLE_ENDIAN,
-      "",
-      Some(context)
-    ).asInstanceOf[Graph[T]]
-
+    if (!inputRdd.isEmpty()) {
+      val first = inputRdd.first()
+      println(first)
+    }
+    val modelBroadCast = ModelBroadcast[T].broadcast(sc, transformer)
     inputRdd.map { tensors =>
-      val output = transformer.forward(tensors)
+      val trans = modelBroadCast.value()
+      val output = trans.forward(tensors.flatten())
       output.asInstanceOf[Table]
+      tensors
     }
   }
 
   private def constructModel(endPoints: Seq[String]): (Graph[T], Node[NodeDef]) = {
     val isInputOp = (n: NodeDef) => inputOp(n.getOp)
-    val (tfGraph, inputs) = TensorflowLoader.buildTFGraph(graph.asJava, endPoints, isInputOp)
+    val (tfGraph, inputs, _) = TensorflowLoader.buildTFGraph(graph.asJava, endPoints, isInputOp)
 
     val inputNodes = inputs.map(name2Node)
 
@@ -368,7 +495,9 @@ class BigDLSessionImpl[T: ClassTag](
 
     require(modelInput == labelInput, "data and label should come from the same queue")
 
-    val data = constructDistributeData(modelOutputs ++ labels)
+    val cache = new DataCache()
+
+    val data = constructDistributeData(modelOutputs ++ labels, cache)
 
     throw new NotImplementedError()
   }

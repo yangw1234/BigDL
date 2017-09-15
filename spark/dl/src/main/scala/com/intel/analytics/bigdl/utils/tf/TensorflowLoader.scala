@@ -56,7 +56,7 @@ object TensorflowLoader{
     val nodeList = parse(graphPrototxt)
 
     // Construct tf node graph
-    val (tfGraph, adjustedInputs) =
+    val (tfGraph, adjustedInputs, _) =
       buildTFGraph(nodeList, outputs, (node: NodeDef) => inputs.contains(node.getName))
 
     // Build BigDL model from the tf node graph
@@ -112,20 +112,20 @@ object TensorflowLoader{
    */
   private[bigdl] def buildTFGraph(nodes : List[NodeDef], outputNodeNames: Seq[String],
                                   isInput: (NodeDef) => Boolean = (_: NodeDef) => false)
-  : (DirectedGraph[NodeDef], Seq[String]) = {
+  : (DirectedGraph[NodeDef], Seq[String], Seq[String]) = {
     import scala.collection.JavaConverters._
     var name2Node = nodes.asScala.map(n => n.getName -> new Node(n)).toMap
 
-    // Process node with multiple tensor output, each tensor is regarded as a node
-    nodes.asScala
-      .flatMap(_.getInputList.asScala)
-      .filter(_.split(TENSOR_SEPARATOR).length > 1)
-      .foreach { nameWithChannel =>
-        val name = nameWithChannel.split(TENSOR_SEPARATOR).head
-        val tfNode = NodeDef.newBuilder(name2Node(name).element)
-          .setName(nameWithChannel).build()
-        name2Node += nameWithChannel -> new Node(tfNode)
-      }
+//    // Process node with multiple tensor output, each tensor is regarded as a node
+//    nodes.asScala
+//      .flatMap(_.getInputList.asScala)
+//      .filter(_.split(TENSOR_SEPARATOR).length > 1)
+//      .foreach { nameWithChannel =>
+//        val name = nameWithChannel.split(TENSOR_SEPARATOR).head
+//        val tfNode = NodeDef.newBuilder(name2Node(name).element)
+//          .setName(nameWithChannel).build()
+//        name2Node += nameWithChannel -> new Node(tfNode)
+//      }
 
     // Build graph
     val outputNodes = if (outputNodeNames == null) {
@@ -137,11 +137,12 @@ object TensorflowLoader{
       results
     }
 
-    def connect(nodes: Seq[Node[NodeDef]]): Seq[String] = {
+    def connect(nodes: Seq[Node[NodeDef]]): (Seq[String], Seq[String]) = {
       var inputCounter = 0
       val queue = new mutable.Queue[Node[NodeDef]]()
       val visited = mutable.Set[Node[NodeDef]]()
       val inputs = new mutable.ArrayBuffer[String]()
+      val originInputs = new mutable.ArrayBuffer[String]()
 
       // Do a BFS to connect the nodes
       queue.enqueue(nodes: _*)
@@ -153,49 +154,83 @@ object TensorflowLoader{
             // continue to traverse
             node.element.getInputList.asScala.foreach { preNodeName =>
               // It is tricky here, remove the first char in the name of control dep node
-              val preNode = if (preNodeName.charAt(0) == '^') {
-                val name = preNodeName.substring(1)
-                val preNode = name2Node(name)
+              var realName = preNodeName
+              var controlDep = false
+              var channel = 0
+
+              if (realName.charAt(0) == '^') {
+                realName = realName.substring(1)
+                controlDep = true
+              }
+              if (realName.split(":").length > 1) {
+                val pair = realName.split(":")
+                realName = pair(0)
+                channel = pair(1).toInt
+              }
+
+              val preNode = name2Node(realName)
+
+              val currNode = if (controlDep) {
                 val dependencyNode = Node(NodeDef.newBuilder()
                   .setOp("DependencyNode")
                   .addInput(preNode.element.getName)
                   .setName(s"depends_on_${preNode.element.getName}")
                   .build())
-                preNode -> dependencyNode -> node
-                preNode
+                dependencyNode -> node
+                dependencyNode
               } else {
-                val preNode = name2Node(preNodeName)
-                preNode -> node
-                preNode
+                node
+              }
+
+              if (channel > 0) {
+                preNode(channel) -> currNode
+              } else {
+                preNode -> currNode
               }
               queue.enqueue(preNode)
             }
           } else {
             if (isInput(node.element) && node.element.getOp != "Placeholder") {
               // if the predefined input node is not a Placeholder, add one to match the Input node
-              val name = s"input$inputCounter"
-              val placeholder = NodeDef.newBuilder()
-                .setName(name)
-                .setOp("Placeholder").build()
-              inputCounter = inputCounter + 1
-              val n = Node(placeholder)
-              n -> node
-              inputs += name
+              val inputNum = getInputNumber(node.element)
+              var i = 0
+              while (i < inputNum) {
+                val name = s"input$inputCounter"
+                val placeholder = NodeDef.newBuilder()
+                  .setName(name)
+                  .setOp("Placeholder").build()
+                inputCounter = inputCounter + 1
+                val n = Node(placeholder)
+                n -> node
+                inputs += name
+                i = i + 1
+              }
+              originInputs += node.element.getName
             } else if (node.element.getOp == "Placeholder") {
               inputs += node.element.getName
+              originInputs += node.element.getName
             }
           }
         }
 
       }
-      inputs
+      (inputs, originInputs)
     }
 
-    val inputs = connect(outputNodes)
+    val (inputs, originInputs) = connect(outputNodes)
 
     val dummyOutput = new Node[NodeDef](null)
     outputNodes.foreach(_ -> dummyOutput)
-    (dummyOutput.graph(reverse = true), inputs)
+    (dummyOutput.graph(reverse = true), inputs, originInputs)
+  }
+
+  private def getInputNumber(nodeDef: NodeDef): Int = {
+    import scala.collection.JavaConverters._
+    nodeDef.getOp match {
+      case "QueueDequeueV2" => nodeDef.getAttrOrThrow("component_types").getList.getTypeCount
+      case "QueueDequeueManyV2" => nodeDef.getAttrOrThrow("component_types").getList.getTypeCount
+      case _ => nodeDef.getInputList.asScala.filterNot(_.charAt(0) == '^').length
+    }
   }
 
   private[bigdl] def buildBigDLModel[T: ClassTag](
@@ -251,7 +286,7 @@ object TensorflowLoader{
         val nextNodes = n.nextNodes.filter(
           n => n.element != null &&
             convertedNode.contains(n) && !context.contains(n.element.getName)
-        ).map(convertedNode(_)).filter(_ != node).toSet
+        ).map(convertedNode(_)).filter(_ != node)
         nextNodes.foreach(node -> _)
 
         val preNodes = inputNodes.flatMap(_.prevNodes)
@@ -290,6 +325,10 @@ object TensorflowLoader{
       List[Node[NodeDef]],
       Seq[Node[NodeDef]]
     )] = {
+
+    if (graph.source.element.getOp == "ConcatV2") {
+      println()
+    }
 
     var i = 0
     while(i < patterns.length) {

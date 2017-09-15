@@ -19,6 +19,7 @@ import java.io.{File => JFile}
 import java.nio.ByteOrder
 import java.util.UUID
 
+import com.google.protobuf.ByteString
 import com.intel.analytics.bigdl.dataset.{DistributedDataSet, MiniBatch}
 import com.intel.analytics.bigdl.nn._
 import com.intel.analytics.bigdl.optim.{DistriOptimizer, Trigger}
@@ -28,7 +29,7 @@ import org.apache.log4j.{Level, Logger}
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import com.intel.analytics.bigdl.numeric.NumericFloat
-import org.tensorflow.framework.NodeDef
+import org.tensorflow.framework.{DataType, NodeDef, TensorProto, TensorShapeProto}
 
 import scala.collection.mutable
 import scala.sys.process._
@@ -103,6 +104,19 @@ class TensorflowLoaderSpec extends TensorflowSpecHelper{
     System.setProperty("bigdl.enableNHWC", "false")
   }
 
+  "TensorFlow loader" should "convert tensor protobuf to bigdl tensor" in {
+
+    val tftensorBuilder = TensorProto.newBuilder()
+      .setDtype(DataType.DT_INT32)
+      .setTensorShape(TensorShapeProto
+        .newBuilder().build())
+
+    tftensorBuilder.addIntVal(3)
+
+    val tensor = TensorflowToBigDL.parseTensor(tftensorBuilder.build(), ByteOrder.LITTLE_ENDIAN)
+    println(tensor)
+  }
+
   "TensorFlow loader" should "read a list of nodes from pb file" in {
     val resource = getClass().getClassLoader().getResource("tf")
     val path = processPath(resource.getPath()) + JFile.separator + "test.pb"
@@ -114,7 +128,7 @@ class TensorflowLoaderSpec extends TensorflowSpecHelper{
     val resource = getClass().getClassLoader().getResource("tf")
     val path = processPath(resource.getPath()) + JFile.separator + "test.pb"
     val results = TensorflowLoader.parse(path)
-    val (tfGraph, _) = TensorflowLoader.buildTFGraph(results, Seq("output"))
+    val (tfGraph, _, _) = TensorflowLoader.buildTFGraph(results, Seq("output"))
     tfGraph.size should be(15)  // there's a dummy output
     val topSort = tfGraph.topologySort// It can do topology sort
     topSort.length should be(15)
@@ -139,7 +153,7 @@ class TensorflowLoaderSpec extends TensorflowSpecHelper{
     val resource = getClass().getClassLoader().getResource("tf")
     val path = processPath(resource.getPath()) + JFile.separator + "test.pb"
     val results = TensorflowLoader.parse(path)
-    val (tfGraph, _) = TensorflowLoader.buildTFGraph(results, Seq("output"),
+    val (tfGraph, _, _) = TensorflowLoader.buildTFGraph(results, Seq("output"),
       (node: NodeDef) => node.getName == "Tanh")
     tfGraph.size should be(9)  // there's a dummy output
     val topSort = tfGraph.topologySort// It can do topology sort
@@ -283,7 +297,7 @@ class TensorflowLoaderSpec extends TensorflowSpecHelper{
 
 
     val results = TensorflowLoader.parse(modelFile)
-    val (tfGraph, inputs) = TensorflowLoader.buildTFGraph(results, Seq("output"))
+    val (tfGraph, inputs, _) = TensorflowLoader.buildTFGraph(results, Seq("output"))
     val model = TensorflowLoader.buildBigDLModel(tfGraph, inputs,
       Seq("output"),
       ByteOrder.LITTLE_ENDIAN, "")
@@ -315,7 +329,7 @@ class TensorflowLoaderSpec extends TensorflowSpecHelper{
     val modelFile = tmpLocation + s + "model.pb"
 
     val results = TensorflowLoader.parse(modelFile)
-    val (tfGraph, inputs) =
+    val (tfGraph, inputs, _) =
       TensorflowLoader.buildTFGraph(results.subList(0, results.size()-1), Seq("output"))
     val model = TensorflowLoader.buildBigDLModel(tfGraph, inputs,
       Seq("output"),
@@ -536,7 +550,7 @@ class TensorflowLoaderSpec extends TensorflowSpecHelper{
     val tfNodes = TensorflowLoader.parse(modelFile)
 
     // filter node for gradient computing
-    val (tfGraph, inputs) =
+    val (tfGraph, inputs, _) =
       TensorflowLoader.buildTFGraph(tfNodes, endPoints.map(_.split(":")(0)),
         (node: NodeDef) => node.getName == "input_node")
     val context = new mutable.HashMap[String, (Tensor[Float], Tensor[Float])]
